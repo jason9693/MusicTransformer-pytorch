@@ -1,0 +1,15 @@
+testdata
+data
+
+*.midi
+*.MID
+*.pickle
+*__pycache__
+*.idea
+
+bin/
+dataset/
+result/
+model/
+logs/
+.dfc/
