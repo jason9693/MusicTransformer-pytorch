@@ -9,7 +9,7 @@
 
 ## Abstract
 
-1. This Repository is perfectly cometible with **tensorflow 2.0**
+1. This Repository is perfectly cometible with **pytorch**
 
 
 
@@ -124,38 +124,3 @@ $ python preprocess.py {midi_load_dir} {dataset_save_dir}
 * click the image.
 
   [<img src="readme_src/sample_meta.jpeg" width="400"/>](https://www.youtube.com/watch?v=n6pi7QJ6nvk&list=PLVopZAnUrGWrbIkLGB3bz5nitWThIueS2)
-
-
-
-## TF2.0 Trouble Shooting
-
-### 1. tf.keras
-
- you can't use `tf.keras` directly in alpha ver. So you should import `from tensorflow.python import keras` ,then use `> keras.{METHODS}` 
-
-* example : 
-
-  ```python
-  from tensorflow.python import keras 
-  dropout = keras.layers.Dropout(0.3)
-  ```
-
-### 2. tf.keras.optimizers.Adam() 
-
-tf-2.0alpha currently not supported **keras.optimizers** as **version 2.** so, you can't use **optimizer.apply_gradients()**. So, you should import `from tensorflow.python.keras.optimizer_v2.adam import Adam` first.
-
-* example:
-
-  ```python
-  from tensorflow.python.keras.optimizer_v2.adam import Adam
-  optimizer = Adam(0.0001)
-  ```
-
-### 3. Keras Model Subclassing
-
-current tf 2.0(alpha) , subclassed keras model can't use method **save(), summary(), fit()** and **save_weigths() with .h5 format**
-
-### 4. Distribute Training
-
-As dist train (with 4GPU) is slower than using single GPU, I trained this model with single GPU. Nonethless, you want to see how to distribute training, See `dist_train.py`
-
