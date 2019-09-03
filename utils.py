@@ -1,7 +1,7 @@
 import os
 import numpy as np
 from deprecated.sequence import EventSeq, ControlSeq
-import torch as torch
+import torch
 import params as par
 
 
@@ -94,17 +94,17 @@ def get_masked_with_pad_tensor(size, src, trg):
     :param trg: target tensor
     :return:
     """
-    src = tf.cast(src[:, tf.newaxis, tf.newaxis, :], tf.int32)
-    trg = tf.cast(trg[:, tf.newaxis, tf.newaxis, :], tf.int32)
-    src_pad_tensor = tf.ones_like(src) * par.pad_token
-    src_mask = tf.cast(tf.equal(src, src_pad_tensor), dtype=tf.int32)
-    trg_mask = tf.cast(tf.equal(src, src_pad_tensor), dtype=tf.int32)
+    src = src[:, None, None, :]
+    trg = trg[:, None, None, :]
+    src_pad_tensor = torch.ones_like(src) * par.pad_token
+    src_mask = torch.equal(src, src_pad_tensor)
+    trg_mask = torch.equal(src, src_pad_tensor)
     if trg is not None:
-        trg_pad_tensor = tf.ones_like(trg) * par.pad_token
-        dec_trg_mask = tf.cast(tf.equal(trg, trg_pad_tensor), dtype=tf.int32)
+        trg_pad_tensor = torch.ones_like(trg) * par.pad_token
+        dec_trg_mask = torch.equal(trg, trg_pad_tensor)
         # boolean reversing i.e) True * -1 + 1 = False
-        seq_mask = tf.sequence_mask(list(range(1, size+1)), size, dtype=tf.int32) * -1 + 1
-        look_ahead_mask = tf.cast(tf.maximum(dec_trg_mask, seq_mask), dtype=tf.int32)
+        seq_mask = sequence_mask(torch.arange(1, size+1), size) * -1 + 1
+        look_ahead_mask = torch.max(dec_trg_mask, seq_mask)
     else:
         trg_mask = None
         look_ahead_mask = None
@@ -118,7 +118,7 @@ def get_mask_tensor(size):
     :return:
     """
     # boolean reversing i.e) True * -1 + 1 = False
-    seq_mask = tf.sequence_mask(range(1, size + 1), size, dtype=tf.int32) * -1 + 1
+    seq_mask = sequence_mask(torch.arange(1, size + 1), size) * -1 + 1
     return seq_mask
 
 
@@ -139,11 +139,11 @@ def pad_with_length(max_length: int, seq: list, pad_val: float=par.pad_token):
     return seq + pad
 
 
-def append_token(data: tf.Tensor):
-    start_token = tf.ones((data.shape[0], 1), dtype=data.dtype) * par.token_sos
-    end_token = tf.ones((data.shape[0], 1), dtype=data.dtype) * par.token_eos
+def append_token(data: torch.Tensor):
+    start_token = torch.ones((data.size(0), 1), dtype=data.dtype) * par.token_sos
+    end_token = torch.ones((data.size(0), 1), dtype=data.dtype) * par.token_eos
 
-    return tf.concat([start_token, data, end_token], -1)
+    return torch.cat([start_token, data, end_token], -1)
 
 
 def weights2boards(weights, dir, step): # weights stored weight[layer][w1,w2]
@@ -154,17 +154,17 @@ def weights2boards(weights, dir, step): # weights stored weight[layer][w1,w2]
 
 
 def shape_list(x):
-  """Shape list"""
-  x_shape = tf.shape(x)
-  x_get_shape = x.get_shape().as_list()
+    """Shape list"""
+    x_shape = x.size()
+    x_get_shape = list(x.size())
 
-  res = []
-  for i, d in enumerate(x_get_shape):
-    if d is not None:
-      res.append(d)
-    else:
-      res.append(x_shape[i])
-  return res
+    res = []
+    for i, d in enumerate(x_get_shape):
+        if d is not None:
+            res.append(d)
+        else:
+            res.append(x_shape[i])
+    return res
 
 
 def attention_image_summary(attn, step=0):
@@ -182,13 +182,13 @@ def attention_image_summary(attn, step=0):
   """
   num_heads = shape_list(attn)[1]
   # [batch, query_length, memory_length, num_heads]
-  image = tf.transpose(attn, [0, 2, 3, 1])
-  image = tf.math.pow(image, 0.2)  # for high-dynamic-range
+  image = attn.view([0, 2, 3, 1])
+  image = torch.pow(image, 0.2)  # for high-dynamic-range
   # Each head will correspond to one of RGB.
   # pad the heads to be a multiple of 3
   image = tf.pad(image, [[0, 0], [0, 0], [0, 0], [0, tf.math.mod(-num_heads, 3)]])
   image = split_last_dimension(image, 3)
-  image = tf.reduce_max(image, 4)
+  image = torch.max(image, dim=4)
   tf.summary.image("attention", image, max_outputs=1, step=step)
 
 
@@ -205,22 +205,30 @@ def split_last_dimension(x, n):
   m = x_shape[-1]
   if isinstance(m, int) and isinstance(n, int):
     assert m % n == 0
-  return tf.reshape(x, x_shape[:-1] + [n, m // n])
+  return torch.reshape(x, x_shape[:-1] + [n, m // n])
 
 
 def subsequent_mask(size):
     "Mask out subsequent positions."
     attn_shape = (1, size, size)
     subsequent_mask = np.triu(np.ones(attn_shape), k=1).astype('uint8')
-    return torch.Tensor.from_numpy(subsequent_mask) == 0
+    return torch.from_numpy(subsequent_mask) == 0
+
+
+def sequence_mask(length, max_length=None):
+    """Tensorflow의 sequence_mask를 구현"""
+    if max_length is None:
+        max_length = length.max()
+    x = torch.arange(max_length, dtype=length.dtype, device=length.device)
+    return x.unsqueeze(0) < length.unsqueeze(1)
 
 
 if __name__ == '__main__':
 
-    s = np.array([np.array([1,2]*50),np.array([1,2,3,4]*25)])
+    s = np.array([np.array([1, 2]*50),np.array([1, 2, 3, 4]*25)])
 
-    t = np.array([np.array([2,3,4,5,6]*20),np.array([1,2,3,4,5]*20)])
+    t = np.array([np.array([2, 3, 4, 5, 6]*20), np.array([1, 2, 3, 4, 5]*20)])
     print(t.shape)
 
-    print(get_masked_with_pad_tensor(100,s,t))
+    print(get_masked_with_pad_tensor(100, s, t))
 

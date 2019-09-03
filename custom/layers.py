@@ -70,43 +70,43 @@ class RelativeGlobalAttention(torch.nn.Module):
         """
         q = inputs[0]
         q = self.Wq(q)
-        q = torch.Tensor.reshape(q, (q.size(0), q.size(1), self.h, -1))
-        q = torch.Tensor.transpose(q, (0, 2, 1, 3))  # batch, h, seq, dh
+        q = torch.reshape(q, (q.size(0), q.size(1), self.h, -1))
+        q = torch.transpose(q, (0, 2, 1, 3))  # batch, h, seq, dh
 
         k = inputs[1]
         k = self.Wk(k)
-        k = torch.Tensor.reshape(k, (k.size(0), k.size(1), self.h, -1))
-        k = torch.Tensor.transpose(k, (0, 2, 1, 3))
+        k = torch.reshape(k, (k.size(0), k.size(1), self.h, -1))
+        k = torch.transpose(k, (0, 2, 1, 3))
 
         v = inputs[2]
         v = self.Wv(v)
-        v = torch.Tensor.reshape(v, (v.size(0), v.size(1), self.h, -1))
-        v = torch.Tensor.transpose(v, (0, 2, 1, 3))
+        v = torch.reshape(v, (v.size(0), v.size(1), self.h, -1))
+        v = torch.transpose(v, (0, 2, 1, 3))
 
         self.len_k = k.shape[2]
         self.len_q = q.shape[2]
 
         E = self._get_left_embedding(self.len_q, self.len_k)
-        QE = torch.Tensor.einsum('bhld,md->bhlm', q, E)
+        QE = torch.einsum('bhld,md->bhlm', q, E)
         QE = self._qe_masking(QE)
         # print(QE.shape)
         Srel = self._skewing(QE)
 
-        Kt = torch.Tensor.transpose(k,[0, 1, 3, 2])
-        QKt = torch.Tensor.matmul(q, Kt)
+        Kt = torch.transpose(k,[0, 1, 3, 2])
+        QKt = torch.matmul(q, Kt)
         logits = QKt + Srel
         logits = logits / math.sqrt(self.dh)
 
         if mask is not None:
-            logits += (torch.Tensor.cast(mask, torch.Tensor.float) * -1e9)
+            logits += (torch.Tensor.cast(mask, torch.float) * -1e9)
 
         attention_weights = F.softmax(logits, -1)
         # tf.print('logit result: \n', logits, output_stream=sys.stdout)
-        attention = torch.Tensor.matmul(attention_weights, v)
+        attention = torch.matmul(attention_weights, v)
         # tf.print('attention result: \n', attention, output_stream=sys.stdout)
 
-        out = torch.Tensor.transpose(attention, (0, 2, 1, 3))
-        out = torch.Tensor.reshape(out, (out.size(0), -1, self.d))
+        out = torch.transpose(attention, (0, 2, 1, 3))
+        out = torch.reshape(out, (out.size(0), -1, self.d))
 
         out = self.fc(out)
         return out, attention_weights
@@ -116,24 +116,14 @@ class RelativeGlobalAttention(torch.nn.Module):
         e = self.E[starting_point:,:]
         return e
 
-    # @staticmethod
-    # def _qe_masking(qe):
-    #     mask = tf.sequence_mask(
-    #         tf.range(qe.shape[-1] -1, qe.shape[-1] - qe.shape[-2] -1, -1), qe.shape[-1])
-    #
-    #     mask = tf.logical_not(mask)
-    #     mask = tf.cast(mask, tf.float32)
-    #
-    #     return mask * qe
-
     def _skewing(self, tensor: torch.Tensor):
-        padded = torch.Tensor.pad(tensor, [[0, 0], [0,0], [0, 0], [1, 0]])
-        reshaped = torch.Tensor.reshape(padded, shape=[-1, padded.size(1), padded.size(-1), padded.size(-2)])
+        padded = torch.pad(tensor, [[0, 0], [0,0], [0, 0], [1, 0]])
+        reshaped = torch.reshape(padded, shape=[-1, padded.size(1), padded.size(-1), padded.size(-2)])
         Srel = reshaped[:, :, 1:, :]
         # print('Sre: {}'.format(Srel))
 
         if self.len_k > self.len_q:
-            Srel = torch.Tensor.pad(Srel, [[0,0], [0,0], [0,0], [0, self.len_k-self.len_q]])
+            Srel = torch.pad(Srel, [[0,0], [0,0], [0,0], [0, self.len_k-self.len_q]])
         elif self.len_k < self.len_q:
             Srel = Srel[:,:,:,:self.len_k]
 
@@ -209,3 +199,34 @@ class DecoderLayer(torch.nn.Module):
             return out, aw1, aw2
         else:
             return out
+
+
+class Encoder(torch.nn.Module):
+    def __init__(self, num_layers, d_model, input_vocab_size, rate=0.1, max_len=None):
+        super(Encoder, self).__init__()
+
+        self.d_model = d_model
+        self.num_layers = num_layers
+
+        self.embedding = torch.nn.Embedding(num_embeddings=input_vocab_size, embedding_dim=d_model)
+        # self.embedding = keras.layers.Embedding(input_vocab_size, d_model)
+        # if max_len is not None:
+        #     self.pos_encoding = PositionEmbedding(max_seq=max_len, embedding_dim=self.d_model)
+        if True:
+            self.pos_encoding = DynamicPositionEmbedding(self.d_model, max_seq=max_len)
+
+        self.enc_layers = [EncoderLayer(d_model, rate, h=self.d_model // 64, additional=False, max_seq=max_len)
+                           for i in range(num_layers)]
+        self.dropout = torch.nn.Dropout(rate)
+
+    def call(self, x, mask=None):
+        weights = []
+        # adding embedding and position encoding.
+        x = self.embedding(x)  # (batch_size, input_seq_len, d_model)
+        x *= torch.sqrt(self.d_model)
+        x = self.pos_encoding(x)
+        x = self.dropout(x)
+        for i in range(self.num_layers):
+            x, w = self.enc_layers[i](x, mask)
+            weights.append(w)
+        return x, weights  # (batch_size, input_seq_len, d_model)

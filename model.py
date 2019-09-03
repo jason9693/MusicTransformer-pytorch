@@ -5,7 +5,7 @@ import params as par
 import sys
 import torch
 import json
-import tensorflow_probability as tfp
+# import tensorflow_probability as tfp
 import random
 import utils
 
@@ -25,10 +25,55 @@ class MusicTransformer(torch.nn.Module):
             self.vocab_size = vocab_size
             self.dist = dist
 
+        self.Decoder = Encoder(
+            num_layers=self.num_layer, d_model=self.embedding_dim,
+            input_vocab_size=self.vocab_size, rate=dropout, max_len=max_seq)
+        self.fc = torch.nn.Linear(self.embedding_dim, self.vocab_size)
 
+        self._set_metrics()
 
-    def forward(self, *input):
-        pass
+    def forward(self, x):
+        decoder, w = self.Decoder(x, mask=lookup_mask)
+        fc = self.fc(decoder)
+        if self.training:
+            return fc
+        elif eval:
+            return fc, w
+        else:
+            return F.softmax(fc)
+
+    def generate(self, prior: list, length=2048, tf_board=False):
+        decode_array = prior
+        decode_array = tf.constant([decode_array])
+        for i in range(min(self.max_seq, length)):
+            # print(decode_array.shape[1])
+            if decode_array.shape[1] >= self.max_seq:
+                break
+            if i % 100 == 0:
+                print('generating... {}% completed'.format((i / min(self.max_seq, length)) * 100))
+            _, _, look_ahead_mask = \
+                utils.get_masked_with_pad_tensor(decode_array.shape[1], decode_array, decode_array)
+
+            result = self.call(decode_array, lookup_mask=look_ahead_mask, training=False)
+            if tf_board:
+                tf.summary.image('generate_vector', tf.expand_dims(result, -1), i)
+            # import sys
+            # tf.print('[debug out:]', result, sys.stdout )
+            u = random.uniform(0, 1)
+            if u > 1:
+                result = tf.argmax(result[:, -1], -1)
+                result = tf.cast(result, tf.int32)
+                decode_array = tf.concat([decode_array, tf.expand_dims(result, -1)], -1)
+            else:
+                pdf = torch.distributions.OneHotCategorical(probs=result[:, -1])
+                result = pdf.sample(1)
+                result = torch.transpose(result, (1, 0))
+                result = tf.cast(result, tf.int32)
+                decode_array = tf.concat([decode_array, result], -1)
+            # decode_array = tf.concat([decode_array, tf.expand_dims(result[:, -1], 0)], -1)
+            del look_ahead_mask
+        decode_array = decode_array[0]
+        return decode_array
 
 
 class MusicTransformerDecoder(torch.nn.Module):
