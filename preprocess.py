@@ -42,17 +42,6 @@ def preprocess_midi_files_under(midi_root, save_dir):
             pickle.dump(data, f)
 
 
-# def _augumentation(seq):
-#     range_note = range(0, processor.RANGE_NOTE_ON+processor.RANGE_NOTE_OFF)
-#     range_time = range(
-#         processor.START_IDX['time_shift'],
-#         processor.START_IDX['time_shift']+processor.RANGE_TIME_SHIFT
-#     )
-#     for idx, data in enumerate(seq):
-#         if data in range_note:
-#
-
-
 class TFRecordsConverter(object):
     def __init__(self, midi_path, output_dir,
                  num_shards_train=3, num_shards_test=1):
@@ -112,10 +101,6 @@ class TFRecordsConverter(object):
         for i in indicies:
             es_seq = self.es_seq_list[i]
             ctrl_seq = self.ctrl_seq_list[i]
-
-        # example = tf.train.Example(features=tf.train.Features(feature={
-        #         'label': TFRecordsConverter._int64_feature(label),
-        #         'text': TFRecordsConverter._bytes_feature(bytes(x, encoding='utf-8'))}))
 
 
 if __name__ == '__main__':

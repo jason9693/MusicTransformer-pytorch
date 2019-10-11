@@ -35,7 +35,7 @@ class DynamicPositionEmbedding(torch.nn.Module):
         self.positional_embedding = embed_sinusoid_list
 
     def forward(self, x):
-        x = x + Variable(self.positional_embedding[:, :x.size(1), :], requires_grad=False)
+        x = x + self.positional_embedding[:, :x.size(1), :]
         return x
 
 
@@ -71,41 +71,39 @@ class RelativeGlobalAttention(torch.nn.Module):
         q = inputs[0]
         q = self.Wq(q)
         q = torch.reshape(q, (q.size(0), q.size(1), self.h, -1))
-        q = torch.transpose(q, (0, 2, 1, 3))  # batch, h, seq, dh
+        q = q.permute(0, 2, 1, 3)  # batch, h, seq, dh
 
         k = inputs[1]
         k = self.Wk(k)
         k = torch.reshape(k, (k.size(0), k.size(1), self.h, -1))
-        k = torch.transpose(k, (0, 2, 1, 3))
+        k = k.permute(0, 2, 1, 3)
 
         v = inputs[2]
         v = self.Wv(v)
         v = torch.reshape(v, (v.size(0), v.size(1), self.h, -1))
-        v = torch.transpose(v, (0, 2, 1, 3))
+        v = v.permute(0, 2, 1, 3)
 
-        self.len_k = k.shape[2]
-        self.len_q = q.shape[2]
+        self.len_k = k.size(2)
+        self.len_q = q.size(2)
 
         E = self._get_left_embedding(self.len_q, self.len_k)
-        QE = torch.einsum('bhld,md->bhlm', q, E)
+        QE = torch.einsum('bhld,md->bhlm', [q, E])
         QE = self._qe_masking(QE)
         # print(QE.shape)
         Srel = self._skewing(QE)
 
-        Kt = torch.transpose(k,[0, 1, 3, 2])
+        Kt = k.permute(0, 1, 3, 2)
         QKt = torch.matmul(q, Kt)
         logits = QKt + Srel
         logits = logits / math.sqrt(self.dh)
 
         if mask is not None:
-            logits += (torch.Tensor.cast(mask, torch.float) * -1e9)
+            logits += (mask * -1e9)
 
         attention_weights = F.softmax(logits, -1)
-        # tf.print('logit result: \n', logits, output_stream=sys.stdout)
         attention = torch.matmul(attention_weights, v)
-        # tf.print('attention result: \n', attention, output_stream=sys.stdout)
 
-        out = torch.transpose(attention, (0, 2, 1, 3))
+        out = attention.view(0, 2, 1, 3)
         out = torch.reshape(out, (out.size(0), -1, self.d))
 
         out = self.fc(out)
@@ -117,13 +115,13 @@ class RelativeGlobalAttention(torch.nn.Module):
         return e
 
     def _skewing(self, tensor: torch.Tensor):
-        padded = torch.pad(tensor, [[0, 0], [0,0], [0, 0], [1, 0]])
+        padded = F.pad(tensor, [0, 0, 0, 0, 0, 0, 1, 0])
         reshaped = torch.reshape(padded, shape=[-1, padded.size(1), padded.size(-1), padded.size(-2)])
         Srel = reshaped[:, :, 1:, :]
         # print('Sre: {}'.format(Srel))
 
         if self.len_k > self.len_q:
-            Srel = torch.pad(Srel, [[0,0], [0,0], [0,0], [0, self.len_k-self.len_q]])
+            Srel = F.pad(Srel, [0, 0, 0, 0, 0, 0, 0, self.len_k-self.len_q])
         elif self.len_k < self.len_q:
             Srel = Srel[:,:,:,:self.len_k]
 
@@ -151,7 +149,7 @@ class EncoderLayer(torch.nn.Module):
         attn_out = self.dropout1(attn_out)
         out1 = self.layernorm1(attn_out+x)
 
-        ffn_out = torch.nn.ReLU(self.FFN_pre(out1))
+        ffn_out = F.relu(self.FFN_pre(out1))
         ffn_out = self.FFN_suf(ffn_out)
         ffn_out = self.dropout2(ffn_out)
         out2 = self.layernorm2(out1+ffn_out)
@@ -190,7 +188,7 @@ class DecoderLayer(torch.nn.Module):
         attn_out2 = self.dropout2(attn_out2)
         attn_out2 = self.layernorm2(out1+attn_out2)
 
-        ffn_out = torch.nn.ReLU(self.FFN_pre(attn_out2))
+        ffn_out = F.relu(self.FFN_pre(attn_out2))
         ffn_out = self.FFN_suf(ffn_out)
         ffn_out = self.dropout3(ffn_out)
         out = self.layernorm3(attn_out2+ffn_out)
@@ -209,9 +207,6 @@ class Encoder(torch.nn.Module):
         self.num_layers = num_layers
 
         self.embedding = torch.nn.Embedding(num_embeddings=input_vocab_size, embedding_dim=d_model)
-        # self.embedding = keras.layers.Embedding(input_vocab_size, d_model)
-        # if max_len is not None:
-        #     self.pos_encoding = PositionEmbedding(max_seq=max_len, embedding_dim=self.d_model)
         if True:
             self.pos_encoding = DynamicPositionEmbedding(self.d_model, max_seq=max_len)
 

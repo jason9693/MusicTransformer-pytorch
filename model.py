@@ -4,6 +4,8 @@ from custom.layers import Encoder
 import params as par
 
 import sys
+import torch
+import torch.distributions as dist
 import json
 import random
 import utils
@@ -66,7 +68,7 @@ class MusicTransformer(torch.nn.Module):
                 result = F.argmax(result[:, -1], -1).to(torch.int32)
                 decode_array = tf.concat([decode_array, tf.expand_dims(result, -1)], -1)
             else:
-                pdf = torch.distributions.OneHotCategorical(probs=result[:, -1])
+                pdf = dist.OneHotCategorical(probs=result[:, -1])
                 result = pdf.sample(1)
                 result = torch.transpose(result, (1, 0)).to(torch.int32)
                 decode_array = torch.cat((decode_array, result), dim=-1)
