@@ -2,12 +2,14 @@ from custom.layers import *
 from custom.callback import *
 from custom.layers import Encoder
 import params as par
+
 import sys
-import torch
 import json
-# import tensorflow_probability as tfp
 import random
 import utils
+
+import torch
+import torch.functional as F
 
 
 class MusicTransformer(torch.nn.Module):
@@ -43,8 +45,8 @@ class MusicTransformer(torch.nn.Module):
             return F.softmax(fc)
 
     def generate(self, prior: list, length=2048, tf_board=False):
-        decode_array = prior
-        decode_array = tf.constant([decode_array])
+        decode_array = np.array([prior])
+        decode_array = torch.from_numpy(decode_array)
         for i in range(min(self.max_seq, length)):
             # print(decode_array.shape[1])
             if decode_array.shape[1] >= self.max_seq:
@@ -61,15 +63,13 @@ class MusicTransformer(torch.nn.Module):
             # tf.print('[debug out:]', result, sys.stdout )
             u = random.uniform(0, 1)
             if u > 1:
-                result = tf.argmax(result[:, -1], -1)
-                result = tf.cast(result, tf.int32)
+                result = F.argmax(result[:, -1], -1).to(torch.int32)
                 decode_array = tf.concat([decode_array, tf.expand_dims(result, -1)], -1)
             else:
                 pdf = torch.distributions.OneHotCategorical(probs=result[:, -1])
                 result = pdf.sample(1)
-                result = torch.transpose(result, (1, 0))
-                result = tf.cast(result, tf.int32)
-                decode_array = tf.concat([decode_array, result], -1)
+                result = torch.transpose(result, (1, 0)).to(torch.int32)
+                decode_array = torch.cat((decode_array, result), dim=-1)
             # decode_array = tf.concat([decode_array, tf.expand_dims(result[:, -1], 0)], -1)
             del look_ahead_mask
         decode_array = decode_array[0]
