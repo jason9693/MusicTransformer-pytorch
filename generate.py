@@ -1,6 +1,6 @@
 from model import MusicTransformer, MusicTransformerDecoder
 from custom.layers import *
-from custom import callback
+from custom import criterion
 import params as par
 from tensorflow.python.keras.optimizer_v2.adam import Adam
 from data import Data

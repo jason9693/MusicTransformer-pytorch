@@ -1,8 +1,12 @@
-from tensorflow.python import keras
-import tensorflow as tf
+from typing import Optional, Any
+
 import params as par
 import sys
-from tensorflow.python.keras.optimizer_v2.learning_rate_schedule import LearningRateSchedule
+
+from torch.__init__ import Tensor
+import torch
+from torch.nn.modules.loss import CrossEntropyLoss
+# from tensorflow.python.keras.optimizer_v2.learning_rate_schedule import LearningRateSchedule
 
 
 class MTFitCallback(keras.callbacks.Callback):
@@ -15,24 +19,20 @@ class MTFitCallback(keras.callbacks.Callback):
         self.model.save(self.save_path)
 
 
-class TransformerLoss(keras.losses.SparseCategoricalCrossentropy):
-    def __init__(self, from_logits=False, reduction='none', debug=False,  **kwargs):
-        super(TransformerLoss, self).__init__(from_logits, reduction, **kwargs)
-        self.debug = debug
-        pass
+class TransformerLoss(CrossEntropyLoss):
+    def __init__(self, weight: Optional[Any] = ..., ignore_index: int = ..., reduction: str = ...) -> None:
+        self.reduction = reduction
+        super().__init__(weight, ignore_index, 'none')
 
-    def call(self, y_true, y_pred):
-        y_true = tf.cast(y_true, tf.int32)
-        mask = tf.math.logical_not(tf.math.equal(y_true, par.pad_token))
-        mask = tf.cast(mask, tf.float32)
-        _loss = super(TransformerLoss, self).call(y_true, y_pred)
+    def forward(self, input: Tensor, target: Tensor) -> Tensor:
+        mask = target != par.pad_token
+        not_masked_length = mask.to(torch.int).sum()
+        _loss = super().forward(input, target)
         _loss *= mask
-        if self.debug:
-            tf.print('loss shape:', _loss.shape, output_stream=sys.stdout)
-            tf.print('output:', tf.argmax(y_pred,-1), output_stream=sys.stdout)
-            tf.print(mask, output_stream=sys.stdout)
-            tf.print(_loss, output_stream=sys.stdout)
-        return _loss
+        return _loss.sum() / not_masked_length
+
+    def __call__(self, input: Tensor, target: Tensor) -> Tensor:
+        return self.forward(input, target)
 
 
 def transformer_dist_train_loss(y_true, y_pred):

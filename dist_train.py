@@ -1,6 +1,6 @@
 from model import MusicTransformer
 from custom.layers import *
-from custom import callback
+from custom import criterion
 import params as par
 from tensorflow.python.keras.optimizer_v2.adam import Adam
 from data import Data
@@ -43,7 +43,7 @@ print(dataset)
 
 
 # load model
-learning_rate = callback.CustomSchedule(par.embedding_dim)
+learning_rate = criterion.CustomSchedule(par.embedding_dim)
 opt = Adam(l_r, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
 
 strategy = tf.distribute.MirroredStrategy()
@@ -58,7 +58,7 @@ with strategy.scope():
             max_seq=max_seq,
             dropout=0.2,
             debug=False, loader_path=load_path)
-    mt.compile(optimizer=opt, loss=callback.transformer_dist_train_loss)
+    mt.compile(optimizer=opt, loss=criterion.transformer_dist_train_loss)
 
     # Train Start
     for e in range(epochs):

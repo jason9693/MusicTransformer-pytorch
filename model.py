@@ -1,5 +1,5 @@
 from custom.layers import *
-from custom.callback import *
+from custom.criterion import *
 from custom.layers import Encoder
 import params as par
 
@@ -16,7 +16,7 @@ import torch.functional as F
 
 class MusicTransformer(torch.nn.Module):
     def __init__(self, embedding_dim=256, vocab_size=388+2, num_layer=6,
-                 max_seq=2048, dropout=0.2, debug=False, loader_path=None, dist=False):
+                 max_seq=2048, dropout=0.2, debug=False, loader_path=None, dist=False, writer=None):
         super().__init__()
 
         if loader_path is not None:
@@ -29,6 +29,7 @@ class MusicTransformer(torch.nn.Module):
             self.vocab_size = vocab_size
             self.dist = dist
 
+        self.writer = writer
         self.Decoder = Encoder(
             num_layers=self.num_layer, d_model=self.embedding_dim,
             input_vocab_size=self.vocab_size, rate=dropout, max_len=max_seq)
@@ -36,15 +37,16 @@ class MusicTransformer(torch.nn.Module):
 
         self._set_metrics()
 
-    def forward(self, x):
+    def forward(self, x, lookup_mask=None):
         decoder, w = self.Decoder(x, mask=lookup_mask)
         fc = self.fc(decoder)
-        if self.training:
-            return fc
-        elif eval:
-            return fc, w
-        else:
-            return F.softmax(fc)
+        return fc, w
+        # if self.training:
+        #     return fc
+        # elif eval:
+        #     return fc, w
+        # else:
+        #     return F.softmax(fc)
 
     def generate(self, prior: list, length=2048, tf_board=False):
         decode_array = np.array([prior])
@@ -58,24 +60,32 @@ class MusicTransformer(torch.nn.Module):
             _, _, look_ahead_mask = \
                 utils.get_masked_with_pad_tensor(decode_array.shape[1], decode_array, decode_array)
 
-            result = self.call(decode_array, lookup_mask=look_ahead_mask, training=False)
-            if tf_board:
-                tf.summary.image('generate_vector', tf.expand_dims(result, -1), i)
-            # import sys
-            # tf.print('[debug out:]', result, sys.stdout )
+            result, _ = self.forward(decode_array, lookup_mask=look_ahead_mask)
+
             u = random.uniform(0, 1)
             if u > 1:
                 result = F.argmax(result[:, -1], -1).to(torch.int32)
-                decode_array = tf.concat([decode_array, tf.expand_dims(result, -1)], -1)
+                decode_array = torch.cat([decode_array, result.unsqueeze(-1)], -1)
             else:
                 pdf = dist.OneHotCategorical(probs=result[:, -1])
                 result = pdf.sample(1)
-                result = torch.transpose(result, (1, 0)).to(torch.int32)
+                result = torch.transpose(result, 1, 0).to(torch.int32)
                 decode_array = torch.cat((decode_array, result), dim=-1)
-            # decode_array = tf.concat([decode_array, tf.expand_dims(result[:, -1], 0)], -1)
             del look_ahead_mask
         decode_array = decode_array[0]
         return decode_array
+
+    def train_forward(self, x):
+        x, _ = self.__prepare_train_data(x, x)
+        _, _, look_ahead_mask = utils.get_masked_with_pad_tensor(self.max_seq, x, x)
+
+        predictions, _ = self.forward(
+            x, lookup_mask=look_ahead_mask,
+        )
+
+        if self._debug:
+            print('train step finished')
+        return predictions
 
 
 class MusicTransformerDecoder(torch.nn.Module):
@@ -141,12 +151,10 @@ class MusicTransformerDecoder(torch.nn.Module):
 
         return [loss.numpy()]+result_metric
 
-    # @tf.function
     def __dist_train_step(self, inp_tar, out_tar, lookup_mask, training):
         return self._distribution_strategy.experimental_run_v2(
             self.__train_step, args=(inp_tar, out_tar, lookup_mask, training))
 
-    # @tf.function
     def __train_step(self, inp_tar, out_tar, lookup_mask, training):
         with tf.GradientTape() as tape:
             predictions = self.call(
@@ -326,22 +334,22 @@ class MusicTransformerDecoder(torch.nn.Module):
         # x = data.add_noise(x, rate=0.01)
         return x, y
 
-
-if __name__ == '__main__':
-    # import utils
-    print(tf.executing_eagerly())
-
-    src = tf.constant([utils.fill_with_placeholder([1,2,3,4],max_len=2048)])
-    trg = tf.constant([utils.fill_with_placeholder([1,2,3,4],max_len=2048)])
-    src_mask, trg_mask, lookup_mask = utils.get_masked_with_pad_tensor(2048, src,trg)
-    print(lookup_mask)
-    print(src_mask)
-    mt = MusicTransformer(debug=True, embedding_dim=par.embedding_dim, vocab_size=par.vocab_size)
-    mt.save_weights('my_model.h5', save_format='h5')
-    mt.load_weights('my_model.h5')
-    result = mt.generate([27, 186,  43, 213, 115, 131], length=100)
-    print(result)
-    from deprecated import sequence
-
-    sequence.EventSeq.from_array(result[0]).to_note_seq().to_midi_file('result.midi')
-    pass
+#
+# if __name__ == '__main__':
+#     # import utils
+#     print(tf.executing_eagerly())
+#
+#     src = tf.constant([utils.fill_with_placeholder([1,2,3,4],max_len=2048)])
+#     trg = tf.constant([utils.fill_with_placeholder([1,2,3,4],max_len=2048)])
+#     src_mask, trg_mask, lookup_mask = utils.get_masked_with_pad_tensor(2048, src,trg)
+#     print(lookup_mask)
+#     print(src_mask)
+#     mt = MusicTransformer(debug=True, embedding_dim=par.embedding_dim, vocab_size=par.vocab_size)
+#     mt.save_weights('my_model.h5', save_format='h5')
+#     mt.load_weights('my_model.h5')
+#     result = mt.generate([27, 186,  43, 213, 115, 131], length=100)
+#     print(result)
+#     from deprecated import sequence
+#
+#     sequence.EventSeq.from_array(result[0]).to_note_seq().to_midi_file('result.midi')
+#     pass

@@ -1,3 +1,5 @@
+torch
+tensorboardX
 absl-py==0.7.1
 alembic==1.0.11
 appdirs==1.4.3
@@ -89,10 +91,7 @@ SQLAlchemy==1.3.5
 sqlparse==0.3.0
 ssh-import-id==5.7
 tabulate==0.8.3
-tb-nightly==1.14.0a20190603
-tensorflow-gpu==2.0.0b1
 termcolor==1.1.0
-tf-estimator-nightly==1.14.0.dev2019060501
 tfp-nightly==0.8.0.dev20190807
 treelib==1.5.5
 urllib3==1.22

@@ -118,12 +118,11 @@ class RelativeGlobalAttention(torch.nn.Module):
         padded = F.pad(tensor, [0, 0, 0, 0, 0, 0, 1, 0])
         reshaped = torch.reshape(padded, shape=[-1, padded.size(1), padded.size(-1), padded.size(-2)])
         Srel = reshaped[:, :, 1:, :]
-        # print('Sre: {}'.format(Srel))
 
         if self.len_k > self.len_q:
             Srel = F.pad(Srel, [0, 0, 0, 0, 0, 0, 0, self.len_k-self.len_q])
         elif self.len_k < self.len_q:
-            Srel = Srel[:,:,:,:self.len_k]
+            Srel = Srel[:, :, :, :self.len_k]
 
         return Srel
 
@@ -224,4 +223,4 @@ class Encoder(torch.nn.Module):
         for i in range(self.num_layers):
             x, w = self.enc_layers[i](x, mask)
             weights.append(w)
-        return x, weights  # (batch_size, input_seq_len, d_model)
+        return x, weights # (batch_size, input_seq_len, d_model)
