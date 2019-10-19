@@ -3,7 +3,7 @@ import numpy as np
 from deprecated.sequence import EventSeq, ControlSeq
 import torch
 import torch.nn.functional as F
-import params as par
+from custom.config import config
 
 
 def find_files_by_extensions(root, exts=[]):
@@ -28,40 +28,6 @@ def event_indeces_to_midi_file(event_indeces, midi_file_name, velocity_scale=0.8
         note.velocity = int((note.velocity - 64) * velocity_scale + 64)
     note_seq.to_midi_file(midi_file_name)
     return len(note_seq.notes)
-
-
-def transposition(events, controls, offset=0):
-    # events [steps, batch_size, event_dim]
-    # return events, controls
-
-    events = np.array(events, dtype=np.int64)
-    controls = np.array(controls, dtype=np.float32)
-    event_feat_ranges = EventSeq.feat_ranges()
-
-    on = event_feat_ranges['note_on']
-    off = event_feat_ranges['note_off']
-
-    if offset > 0:
-        indeces0 = (((on.start <= events) & (events < on.stop - offset)) |
-                    ((off.start <= events) & (events < off.stop - offset)))
-        indeces1 = (((on.stop - offset  <= events) & (events < on.stop)) |
-                    ((off.stop - offset <= events) & (events < off.stop)))
-        events[indeces0] += offset
-        events[indeces1] += offset - 12
-    elif offset < 0:
-        indeces0 = (((on.start - offset <= events) & (events < on.stop)) |
-                    ((off.start - offset <= events) & (events < off.stop)))
-        indeces1 = (((on.start <= events) & (events < on.start - offset)) |
-                    ((off.start <= events) & (events < off.start - offset)))
-        events[indeces0] += offset
-        events[indeces1] += offset + 12
-
-    assert ((0 <= events) & (events < EventSeq.dim())).all()
-    histr = ControlSeq.feat_ranges()['pitch_histogram']
-    controls[:, :, histr.start:histr.stop] = np.roll(
-                    controls[:, :, histr.start:histr.stop], offset, -1)
-
-    return events, controls
 
 
 def dict2params(d, f=','):
@@ -97,11 +63,11 @@ def get_masked_with_pad_tensor(size, src, trg):
     """
     src = src[:, None, None, :]
     trg = trg[:, None, None, :]
-    src_pad_tensor = torch.ones_like(src) * par.pad_token
+    src_pad_tensor = torch.ones_like(src) * config.pad_token
     src_mask = torch.equal(src, src_pad_tensor)
     trg_mask = torch.equal(src, src_pad_tensor)
     if trg is not None:
-        trg_pad_tensor = torch.ones_like(trg) * par.pad_token
+        trg_pad_tensor = torch.ones_like(trg) * config.pad_token
         dec_trg_mask = trg == trg_pad_tensor
         # boolean reversing i.e) True * -1 + 1 = False
         seq_mask = sequence_mask(torch.arange(1, size+1), size) * -1 + 1
@@ -123,12 +89,12 @@ def get_mask_tensor(size):
     return seq_mask
 
 
-def fill_with_placeholder(prev_data: list, max_len: int, fill_val: float=par.pad_token):
+def fill_with_placeholder(prev_data: list, max_len: int, fill_val: float=config.pad_token):
     placeholder = [fill_val for _ in range(max_len - len(prev_data))]
     return prev_data + placeholder
 
 
-def pad_with_length(max_length: int, seq: list, pad_val: float=par.pad_token):
+def pad_with_length(max_length: int, seq: list, pad_val: float=config.pad_token):
     """
     :param max_length: max length of token
     :param seq: token list with shape:(length, dim)
@@ -141,8 +107,8 @@ def pad_with_length(max_length: int, seq: list, pad_val: float=par.pad_token):
 
 
 def append_token(data: torch.Tensor):
-    start_token = torch.ones((data.size(0), 1), dtype=data.dtype) * par.token_sos
-    end_token = torch.ones((data.size(0), 1), dtype=data.dtype) * par.token_eos
+    start_token = torch.ones((data.size(0), 1), dtype=data.dtype) * config.token_sos
+    end_token = torch.ones((data.size(0), 1), dtype=data.dtype) * config.token_eos
 
     return torch.cat([start_token, data, end_token], -1)
 

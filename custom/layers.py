@@ -2,7 +2,6 @@ import math as m
 import numpy as np
 import math
 import torch
-from torch.autograd import Variable
 import torch.nn.functional as F
 
 
