@@ -102,7 +102,7 @@ def get_masked_with_pad_tensor(size, src, trg):
     trg_mask = torch.equal(src, src_pad_tensor)
     if trg is not None:
         trg_pad_tensor = torch.ones_like(trg) * par.pad_token
-        dec_trg_mask = torch.equal(trg, trg_pad_tensor)
+        dec_trg_mask = trg == trg_pad_tensor
         # boolean reversing i.e) True * -1 + 1 = False
         seq_mask = sequence_mask(torch.arange(1, size+1), size) * -1 + 1
         look_ahead_mask = torch.max(dec_trg_mask, seq_mask)
@@ -161,7 +161,7 @@ def shape_list(x):
     return res
 
 
-def attention_image_summary(attn, step=0, writer=None):
+def attention_image_summary(name, attn, step=0, writer=None):
     """Compute color image summary.
     Args:
     attn: a Tensor with shape [batch, num_heads, query_length, memory_length]
@@ -183,7 +183,7 @@ def attention_image_summary(attn, step=0, writer=None):
     image = F.pad(image, [0, 0, 0, 0, 0, 0, 0, torch.fmod(-num_heads, 3)])
     image = split_last_dimension(image, 3)
     image = torch.max(image, dim=4)
-    writer.add_image(attn, image, max_outputs=1, global_step=step)
+    writer.add_image(name, image, global_step=step, deformats='HWC')
 
 
 def split_last_dimension(x, n):

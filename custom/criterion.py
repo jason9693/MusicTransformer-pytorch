@@ -27,6 +27,7 @@ class TransformerLoss(CrossEntropyLoss):
     def forward(self, input: Tensor, target: Tensor) -> Tensor:
         mask = target != par.pad_token
         not_masked_length = mask.to(torch.int).sum()
+        input = input.permute(0, -1, -2)
         _loss = super().forward(input, target)
         _loss *= mask
         return _loss.sum() / not_masked_length

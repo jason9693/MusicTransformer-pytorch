@@ -35,18 +35,16 @@ gen_log_dir = 'logs/mt_decoder/generate_'+current_time+'/generate'
 gen_summary_writer = tf.summary.create_file_writer(gen_log_dir)
 
 
-if mode == 'enc-dec':
-    print(">> generate with original seq2seq wise... beam size is {}".format(beam))
-    mt = MusicTransformer(
-            embedding_dim=256,
-            vocab_size=par.vocab_size,
-            num_layer=6,
-            max_seq=2048,
-            dropout=0.2,
-            debug=False, loader_path=load_path)
-else:
-    print(">> generate with decoder wise... beam size is {}".format(beam))
-    mt = MusicTransformerDecoder(loader_path=load_path)
+print(">> generate with original seq2seq wise... beam size is {}".format(beam))
+# mt = MusicTransformer(
+#             embedding_dim=256,
+#             vocab_size=par.vocab_size,
+#             num_layer=6,
+#             max_seq=2048,
+#             dropout=0.2,
+#             debug=False, loader_path=load_path)
+mt = torch.load(load_path)
+mt.eval()
 
 inputs = encode_midi('dataset/midi/BENABD10.mid')
 
