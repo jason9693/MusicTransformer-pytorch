@@ -1,7 +1,8 @@
 from model import MusicTransformer
+import custom
 from custom.metrics import *
 from custom.layers import *
-from custom.criterion import TransformerLoss
+from custom.criterion import SmoothCrossEntropyLoss
 from custom.config import config
 from data import Data
 
@@ -9,12 +10,13 @@ import utils
 import argparse
 import datetime
 
+import torch
 import torch.optim as optim
-from torch.utils.tensorboard import SummaryWriter
+from tensorboardX import SummaryWriter
 
 
 # set config
-parser = argparse.ArgumentParser()
+parser = custom.get_argument_parser()
 args = parser.parse_args()
 config.load(args.model_dir, args.configs, initialize=True)
 
@@ -37,11 +39,16 @@ learning_rate = config.l_r
 mt = MusicTransformer(
             embedding_dim=config.embedding_dim,
             vocab_size=config.vocab_size,
-            num_layer=config.num_layer,
+            num_layer=config.num_layers,
             max_seq=config.max_seq,
             dropout=config.dropout,
             debug=config.debug, loader_path=config.load_path
 )
+opt = optim.Adam(mt.parameters(), lr=config.l_r)
+metric_set = MetricsSet({
+    'accuracy': Accuracy(),
+    'loss': SmoothCrossEntropyLoss(config.label_smooth, config.vocab_size, config.pad_token)
+})
 
 # multi-GPU set
 if torch.cuda.device_count() > 1:
@@ -49,10 +56,6 @@ if torch.cuda.device_count() > 1:
     mt = torch.nn.DataParallel(mt)
 else:
     single_mt = mt
-
-criterion = TransformerLoss
-opt = optim.Adam(mt.parameters(), lr=config.l_r)
-metric_set = MetricsSet({'accuracy': Accuracy(), 'loss': TransformerLoss()})
 
 # define tensorboard writer
 current_time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -88,7 +91,7 @@ for e in range(config.epochs):
 
             eval_preiction, weights = mt.teacher_forcing_forward(eval_x)
             eval_metrics = metric_set(eval_preiction, eval_y)
-            torch.save(single_mt, config.save_path)
+            torch.save(single_mt, config.model_dir+'train-{}.pth'.format(idx))
             if b == 0:
                 train_summary_writer.add_histogram("target_analysis", batch_y, global_step=e)
                 train_summary_writer.add_histogram("source_analysis", batch_x, global_step=e)

@@ -1,9 +1,9 @@
 import utils
 import random
 import pickle
-from tensorflow.python import keras
 import numpy as np
-import params as par
+
+from custom.config import config
 
 
 class Data:
@@ -84,9 +84,9 @@ class Data:
                 start = random.randrange(0,len(data) - max_length)
                 data = data[start:start + max_length]
             else:
-                data = np.append(data, par.token_eos)
+                data = np.append(data, config.token_eos)
                 while len(data) < max_length:
-                    data = np.append(data, par.pad_token)
+                    data = np.append(data, config.pad_token)
         return data
 
 
@@ -111,7 +111,7 @@ def add_noise(inputs: np.array, rate:float = 0.01): # input's dim is 2
     num_mask = int(rate * seq_length)
     for inp in inputs:
         rand_idx = random.sample(range(seq_length), num_mask)
-        inp[rand_idx] = random.randrange(0, par.pad_token)
+        inp[rand_idx] = random.randrange(0, config.pad_token)
 
     return inputs
 

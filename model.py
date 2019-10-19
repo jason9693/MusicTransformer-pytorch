@@ -9,7 +9,7 @@ import random
 import utils
 
 import torch
-from torch.utils.tensorboard import SummaryWriter
+from tensorboardX import SummaryWriter
 from progress.bar import Bar
 
 
@@ -33,8 +33,6 @@ class MusicTransformer(torch.nn.Module):
             num_layers=self.num_layer, d_model=self.embedding_dim,
             input_vocab_size=self.vocab_size, rate=dropout, max_len=max_seq)
         self.fc = torch.nn.Linear(self.embedding_dim, self.vocab_size)
-
-        self._set_metrics()
 
     def forward(self, x, lookup_mask=None):
         decoder, w = self.Decoder(x, mask=lookup_mask)

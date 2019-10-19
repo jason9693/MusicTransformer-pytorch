@@ -56,7 +56,7 @@ class RelativeGlobalAttention(torch.nn.Module):
         self.Wv = torch.nn.Linear(self.d, self.d)
         self.fc = torch.nn.Linear(d, d)
         self.additional = add_emb
-        self.E = self.add_weight('emb', shape=[self.max_seq, int(self.dh)])
+        self.E = torch.randn([self.max_seq, int(self.dh)], requires_grad=True)
         if self.additional:
             self.Radd = None
 

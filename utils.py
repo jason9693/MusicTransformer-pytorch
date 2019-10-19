@@ -3,7 +3,7 @@ import numpy as np
 from deprecated.sequence import EventSeq, ControlSeq
 import torch
 import torch.nn.functional as F
-from custom.config import config
+# from custom.config import config
 
 
 def find_files_by_extensions(root, exts=[]):
@@ -54,20 +54,21 @@ def compute_gradient_norm(parameters, norm_type=2):
     return total_norm
 
 
-def get_masked_with_pad_tensor(size, src, trg):
+def get_masked_with_pad_tensor(size, src, trg, pad_token):
     """
     :param size: the size of target input
     :param src: source tensor
     :param trg: target tensor
+    :param pad_token: pad token
     :return:
     """
     src = src[:, None, None, :]
     trg = trg[:, None, None, :]
-    src_pad_tensor = torch.ones_like(src) * config.pad_token
+    src_pad_tensor = torch.ones_like(src) * pad_token
     src_mask = torch.equal(src, src_pad_tensor)
     trg_mask = torch.equal(src, src_pad_tensor)
     if trg is not None:
-        trg_pad_tensor = torch.ones_like(trg) * config.pad_token
+        trg_pad_tensor = torch.ones_like(trg) * pad_token
         dec_trg_mask = trg == trg_pad_tensor
         # boolean reversing i.e) True * -1 + 1 = False
         seq_mask = sequence_mask(torch.arange(1, size+1), size) * -1 + 1
@@ -89,12 +90,12 @@ def get_mask_tensor(size):
     return seq_mask
 
 
-def fill_with_placeholder(prev_data: list, max_len: int, fill_val: float=config.pad_token):
+def fill_with_placeholder(prev_data: list, max_len: int, fill_val: float):
     placeholder = [fill_val for _ in range(max_len - len(prev_data))]
     return prev_data + placeholder
 
 
-def pad_with_length(max_length: int, seq: list, pad_val: float=config.pad_token):
+def pad_with_length(max_length: int, seq: list, pad_val: float):
     """
     :param max_length: max length of token
     :param seq: token list with shape:(length, dim)
@@ -106,9 +107,9 @@ def pad_with_length(max_length: int, seq: list, pad_val: float=config.pad_token)
     return seq + pad
 
 
-def append_token(data: torch.Tensor):
-    start_token = torch.ones((data.size(0), 1), dtype=data.dtype) * config.token_sos
-    end_token = torch.ones((data.size(0), 1), dtype=data.dtype) * config.token_eos
+def append_token(data: torch.Tensor, eos_token):
+    start_token = torch.ones((data.size(0), 1), dtype=data.dtype) * eos_token
+    end_token = torch.ones((data.size(0), 1), dtype=data.dtype) * eos_token
 
     return torch.cat([start_token, data, end_token], -1)
 

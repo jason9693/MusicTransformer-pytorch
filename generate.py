@@ -1,4 +1,5 @@
 from custom.layers import *
+import custom
 from custom import criterion
 from data import Data
 from custom.config import config
@@ -10,9 +11,8 @@ import argparse
 
 from tensorboardX import SummaryWriter
 
-parser = argparse.ArgumentParser()
-args = parser.parse_args()
-
+parser = custom.get_argument_parser()
+args=parser.parse_args()
 config.load(args.model_dir, args.configs, initialize=True)
 
 # check cuda
