@@ -99,7 +99,7 @@ for e in range(config.epochs):
 
             eval_preiction, weights = mt.forward(eval_x)
             eval_metrics = metric_set(eval_preiction, eval_y)
-            torch.save(single_mt, args.model_dir+'train-{}.pth'.format(idx))
+            torch.save(single_mt.state_dict(), args.model_dir+'/train-{}.pth'.format(idx))
             if b == 0:
                 train_summary_writer.add_histogram("target_analysis", batch_y, global_step=e)
                 train_summary_writer.add_histogram("source_analysis", batch_x, global_step=e)
@@ -117,6 +117,7 @@ for e in range(config.epochs):
             print('Train >>>> Loss: {:6.6}, Accuracy: {}'.format(metrics['loss'], metrics['accuracy']))
             print('Eval >>>> Loss: {:6.6}, Accuracy: {}'.format(eval_metrics['loss'], eval_metrics['acccuracy']))
 
+torch.save(single_mt.state_dict(), args.model_dir+'/final.pth'.format(idx))
 eval_summary_writer.close()
 train_summary_writer.close()
 

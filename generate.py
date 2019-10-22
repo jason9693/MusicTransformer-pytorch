@@ -1,8 +1,9 @@
-from custom.layers import *
 import custom
 from custom import criterion
-from data import Data
+from custom.layers import *
 from custom.config import config
+from model import MusicTransformer
+from data import Data
 import utils
 from midi_processor.processor import decode_midi, encode_midi
 
@@ -11,8 +12,9 @@ import argparse
 
 from tensorboardX import SummaryWriter
 
+
 parser = custom.get_argument_parser()
-args=parser.parse_args()
+args = parser.parse_args()
 config.load(args.model_dir, args.configs, initialize=True)
 
 # check cuda
@@ -26,14 +28,14 @@ current_time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
 gen_log_dir = 'logs/mt_decoder/generate_'+current_time+'/generate'
 gen_summary_writer = SummaryWriter(gen_log_dir)
 
-# mt = MusicTransformer(
-#             embedding_dim=256,
-#             vocab_size=par.vocab_size,
-#             num_layer=6,
-#             max_seq=2048,
-#             dropout=0.2,
-#             debug=False, loader_path=load_path)
-mt = torch.load(config.load_path)
+mt = MusicTransformer(
+    embedding_dim=config.embedding_dim,
+    vocab_size=config.vocab_size,
+    num_layer=config.num_layers,
+    max_seq=config.max_seq,
+    dropout=0,
+    debug=False)
+mt = torch.load_state_dict(args.model_dir+'/final.pth')
 mt.eval()
 
 if config.condition_file is not None:
