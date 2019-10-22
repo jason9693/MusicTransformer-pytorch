@@ -66,19 +66,11 @@ $ python preprocess.py {midi_load_dir} {dataset_save_dir}
 
 ## Trainig
 
-* ~~Train with Encoder & Decoder architecture ( original transformer architecture )~~
+```bash
+$ python train.py -c {config yml file 1} {config yml file 2} ... -m {model_dir}
+```
 
-  -> original transformer model is **not compatible** with **music generation** task. ( attention map is entangled ) 
 
-  -> If you wanna see this model, see `MusicTransformer`  class in `model.py`
-
-* Train with only Decoder wise ( only self-attention AR. )
-
-  ```bash
-  $ python train.py -c {config yml file 1} {config yml file 2} ... -m {model_dir}
-  ```
-
-  
 
 ## Hyper Parameter
 
