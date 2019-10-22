@@ -1,3 +1,5 @@
+import utils
+
 import math as m
 import numpy as np
 import math
@@ -34,7 +36,7 @@ class DynamicPositionEmbedding(torch.nn.Module):
         self.positional_embedding = embed_sinusoid_list
 
     def forward(self, x):
-        x = x + self.positional_embedding[:, :x.size(1), :]
+        x = x + torch.from_numpy(self.positional_embedding[:, :x.size(1), :]).to(x.device, dtype=x.dtype)
         return x
 
 
@@ -85,10 +87,9 @@ class RelativeGlobalAttention(torch.nn.Module):
         self.len_k = k.size(2)
         self.len_q = q.size(2)
 
-        E = self._get_left_embedding(self.len_q, self.len_k)
+        E = self._get_left_embedding(self.len_q, self.len_k).to(q.device)
         QE = torch.einsum('bhld,md->bhlm', [q, E])
         QE = self._qe_masking(QE)
-        # print(QE.shape)
         Srel = self._skewing(QE)
 
         Kt = k.permute(0, 1, 3, 2)
@@ -97,12 +98,12 @@ class RelativeGlobalAttention(torch.nn.Module):
         logits = logits / math.sqrt(self.dh)
 
         if mask is not None:
-            logits += (mask * -1e9)
+            logits += (mask * -1e9).to(logits.dtype)
 
         attention_weights = F.softmax(logits, -1)
         attention = torch.matmul(attention_weights, v)
 
-        out = attention.view(0, 2, 1, 3)
+        out = attention.permute(0, 2, 1, 3)
         out = torch.reshape(out, (out.size(0), -1, self.d))
 
         out = self.fc(out)
@@ -114,16 +115,23 @@ class RelativeGlobalAttention(torch.nn.Module):
         return e
 
     def _skewing(self, tensor: torch.Tensor):
-        padded = F.pad(tensor, [0, 0, 0, 0, 0, 0, 1, 0])
-        reshaped = torch.reshape(padded, shape=[-1, padded.size(1), padded.size(-1), padded.size(-2)])
+        padded = F.pad(tensor, [1, 0, 0, 0, 0, 0, 0, 0])
+        reshaped = torch.reshape(padded, shape=[padded.size(0), padded.size(1), padded.size(-1), padded.size(-2)])
         Srel = reshaped[:, :, 1:, :]
-
         if self.len_k > self.len_q:
             Srel = F.pad(Srel, [0, 0, 0, 0, 0, 0, 0, self.len_k-self.len_q])
         elif self.len_k < self.len_q:
             Srel = Srel[:, :, :, :self.len_k]
 
         return Srel
+
+    @staticmethod
+    def _qe_masking(qe):
+        mask = utils.sequence_mask(
+            torch.arange(qe.size()[-1] - 1, qe.size()[-1] - qe.size()[-2] - 1, -1).to(qe.device),
+            qe.size()[-1])
+        mask = ~mask.to(mask.device)
+        return mask.to(qe.dtype) * qe
 
 
 class EncoderLayer(torch.nn.Module):
@@ -208,18 +216,33 @@ class Encoder(torch.nn.Module):
         if True:
             self.pos_encoding = DynamicPositionEmbedding(self.d_model, max_seq=max_len)
 
-        self.enc_layers = [EncoderLayer(d_model, rate, h=self.d_model // 64, additional=False, max_seq=max_len)
-                           for i in range(num_layers)]
+        self.enc_layers = torch.nn.ModuleList(
+            [EncoderLayer(d_model, rate, h=self.d_model // 64, additional=False, max_seq=max_len)
+                           for i in range(num_layers)])
         self.dropout = torch.nn.Dropout(rate)
 
-    def call(self, x, mask=None):
+    def forward(self, x, mask=None):
         weights = []
         # adding embedding and position encoding.
         x = self.embedding(x)  # (batch_size, input_seq_len, d_model)
-        x *= torch.sqrt(self.d_model)
+        x *= math.sqrt(self.d_model)
         x = self.pos_encoding(x)
         x = self.dropout(x)
         for i in range(self.num_layers):
             x, w = self.enc_layers[i](x, mask)
             weights.append(w)
         return x, weights # (batch_size, input_seq_len, d_model)
+
+
+class MusicTransformerDataParallel(torch.nn.DataParallel):
+    def __getattr__(self, name):
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self.module, name)
+
+    def forward(self, *inputs, **kwargs):
+        try:
+            return super().forward(*inputs)
+        except NotImplementedError:
+            return self.module(*inputs)

@@ -28,7 +28,7 @@ else:
 
 
 # load data
-dataset = Data('dataset/processed')
+dataset = Data(config.pickle_dir)
 print(dataset)
 
 
@@ -44,9 +44,10 @@ mt = MusicTransformer(
             dropout=config.dropout,
             debug=config.debug, loader_path=config.load_path
 )
+mt.to(config.device)
 opt = optim.Adam(mt.parameters(), lr=config.l_r)
 metric_set = MetricsSet({
-    'accuracy': Accuracy(),
+    'accuracy': CategoricalAccuracy(),
     'loss': SmoothCrossEntropyLoss(config.label_smooth, config.vocab_size, config.pad_token)
 })
 
@@ -57,6 +58,8 @@ if torch.cuda.device_count() > 1:
 else:
     single_mt = mt
 
+print(mt)
+
 # define tensorboard writer
 current_time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
 train_log_dir = 'logs/mt_decoder/'+current_time+'/train'
@@ -66,32 +69,37 @@ train_summary_writer = SummaryWriter(train_log_dir)
 eval_summary_writer = SummaryWriter(eval_log_dir)
 
 # Train Start
+print(">> Train start...")
 idx = 0
 for e in range(config.epochs):
+    print(">>> [Epoch was updated]")
     for b in range(len(dataset.files) // config.batch_size):
         opt.zero_grad()
         try:
             batch_x, batch_y = dataset.slide_seq2seq_batch(config.batch_size, config.max_seq)
-            batch_x = torch.from_numpy(batch_x).to(args.device, non_blocking=True)
-            batch_y - torch.from_numpy(batch_y).to(args.device, non_blocking=True)
-        except:
+            batch_x = torch.from_numpy(batch_x).contiguous().to(config.device, non_blocking=True)
+            batch_y = torch.from_numpy(batch_y).contiguous().to(config.device, non_blocking=True)
+        except IndexError:
             continue
 
-        sample = mt.teacher_forcing_forward(batch_x)
+        mt.train()
+        sample, _ = mt.forward(batch_x)
         metrics = metric_set(sample, batch_y)
         loss = metrics['loss']
         loss.backward()
         opt.step()
+        if config.debug:
+            print("[Loss]: {}".format(loss))
 
         # result_metrics = metric_set(sample, batch_y)
         if b % 100 == 0:
             eval_x, eval_y = dataset.slide_seq2seq_batch(config.batch_size, config.max_seq, 'eval')
-            eval_x = torch.from_numpy(eval_x).to(args.device, non_blocking=True)
-            eval_y = torch.from_numpy(eval_y).to(args.device, non_blocking=True)
+            eval_x = torch.from_numpy(eval_x).contiguous().to(config.device, non_blocking=True)
+            eval_y = torch.from_numpy(eval_y).contiguous().to(config.device, non_blocking=True)
 
-            eval_preiction, weights = mt.teacher_forcing_forward(eval_x)
+            eval_preiction, weights = mt.forward(eval_x)
             eval_metrics = metric_set(eval_preiction, eval_y)
-            torch.save(single_mt, config.model_dir+'train-{}.pth'.format(idx))
+            torch.save(single_mt, args.model_dir+'train-{}.pth'.format(idx))
             if b == 0:
                 train_summary_writer.add_histogram("target_analysis", batch_y, global_step=e)
                 train_summary_writer.add_histogram("source_analysis", batch_x, global_step=e)

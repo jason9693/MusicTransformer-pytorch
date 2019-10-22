@@ -42,7 +42,7 @@ else:
     inputs = np.array([[28]])
 inputs = torch.from_numpy([inputs]).to(config.device)
 
-result = mt.generate(inputs, beam=1, length=config.length, tf_board_writer=gen_summary_writer)
+result = mt(inputs, config.length, gen_summary_writer)
 
 for i in result:
     print(i)

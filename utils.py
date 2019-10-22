@@ -64,15 +64,17 @@ def get_masked_with_pad_tensor(size, src, trg, pad_token):
     """
     src = src[:, None, None, :]
     trg = trg[:, None, None, :]
-    src_pad_tensor = torch.ones_like(src) * pad_token
+    src_pad_tensor = torch.ones_like(src).to(src.device.type) * pad_token
     src_mask = torch.equal(src, src_pad_tensor)
     trg_mask = torch.equal(src, src_pad_tensor)
     if trg is not None:
-        trg_pad_tensor = torch.ones_like(trg) * pad_token
+        trg_pad_tensor = torch.ones_like(trg).to(trg.device.type) * pad_token
         dec_trg_mask = trg == trg_pad_tensor
         # boolean reversing i.e) True * -1 + 1 = False
-        seq_mask = sequence_mask(torch.arange(1, size+1), size) * -1 + 1
-        look_ahead_mask = torch.max(dec_trg_mask, seq_mask)
+        seq_mask = sequence_mask(torch.arange(1, size+1).to(trg.device), size) * -1 + 1
+        # look_ahead_mask = torch.max(dec_trg_mask, seq_mask)
+        look_ahead_mask = dec_trg_mask | seq_mask
+
     else:
         trg_mask = None
         look_ahead_mask = None
@@ -143,7 +145,7 @@ def attention_image_summary(name, attn, step=0, writer=None):
     """
     num_heads = shape_list(attn)[1]
     # [batch, query_length, memory_length, num_heads]
-    image = attn.view([0, 2, 3, 1])
+    image = attn.permute(0, 2, 3, 1)
     image = torch.pow(image, 0.2)  # for high-dynamic-range
     # Each head will correspond to one of RGB.
     # pad the heads to be a multiple of 3

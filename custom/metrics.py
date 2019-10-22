@@ -30,10 +30,13 @@ class CategoricalAccuracy(Accuracy):
         return super().forward(categorical_input, target)
 
 
-class MetricsSet(_Metric):
+class MetricsSet(object):
     def __init__(self, metric_dict: Dict):
         super().__init__()
         self.metrics = metric_dict
+
+    def __call__(self, input: torch.Tensor, target: torch.Tensor):
+        return self.forward(input=input, target=target)
 
     def forward(self, input: torch.Tensor, target: torch.Tensor):
         # return [metric(input, target) for metric in self.metrics]

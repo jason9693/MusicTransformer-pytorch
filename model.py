@@ -1,6 +1,7 @@
 from custom.layers import *
 from custom.criterion import *
 from custom.layers import Encoder
+from custom.config import config
 
 import sys
 import torch
@@ -34,23 +35,29 @@ class MusicTransformer(torch.nn.Module):
             input_vocab_size=self.vocab_size, rate=dropout, max_len=max_seq)
         self.fc = torch.nn.Linear(self.embedding_dim, self.vocab_size)
 
-    def forward(self, x, lookup_mask=None):
-        decoder, w = self.Decoder(x, mask=lookup_mask)
-        fc = self.fc(decoder)
-        fc = fc.softmax(-1)
-        return fc, w
+    def forward(self, x, length=None, writer=None):
+        if self.training:
+            _, _, look_ahead_mask = utils.get_masked_with_pad_tensor(self.max_seq, x, x, config.pad_token)
+            decoder, w = self.Decoder(x, look_ahead_mask)
+            fc = self.fc(decoder)
+            fc = fc.softmax(-1)
+            return fc.contiguous(), [weight.contiguous() for weight in w]
+        else:
+            return self.generate(self.Decoder, x, length, writer).contiguous()
 
-    def generate(self, prior: torch.Tensor, length=2048, tf_board_writer: SummaryWriter = None):
+    def generate(self, decode_fn, prior: torch.Tensor, length=2048, tf_board_writer: SummaryWriter = None):
         decode_array = prior
         for i in Bar('generating').iter(range(min(self.max_seq, length))):
             if decode_array.shape[1] >= self.max_seq:
                 break
-            if i % 100 == 0:
-                print('generating... {}% completed'.format((i / min(self.max_seq, length)) * 100))
             _, _, look_ahead_mask = \
                 utils.get_masked_with_pad_tensor(decode_array.shape[1], decode_array, decode_array)
 
-            result, _ = self.forward(decode_array, lookup_mask=look_ahead_mask)
+            # result, _ = self.forward(decode_array, lookup_mask=look_ahead_mask)
+            result, _ = decode_fn(decode_array, look_ahead_mask)
+            result = self.fc(result)
+            result = result.softmax(-1)
+
             if tf_board_writer:
                 tf_board_writer.add_image("logits", result, global_step=i)
 
@@ -67,17 +74,16 @@ class MusicTransformer(torch.nn.Module):
         decode_array = decode_array[0]
         return decode_array
 
-    def teacher_forcing_forward(self, x, attn=False):
-        x, _ = self.__prepare_train_data(x, x)
-        _, _, look_ahead_mask = utils.get_masked_with_pad_tensor(self.max_seq, x, x)
-
-        predictions, w = self.forward(
-            x, lookup_mask=look_ahead_mask,
-        )
-
-        if self._debug:
-            print('train step finished')
-        if attn:
-            return predictions, w
-        else:
-            return predictions
+    # def teacher_forcing_forward(self, x, attn=False):
+    #     _, _, look_ahead_mask = utils.get_masked_with_pad_tensor(self.max_seq, x, x, config.pad_token)
+    #
+    #     predictions, w = self(
+    #         x, lookup_mask=look_ahead_mask,
+    #     )
+    #
+    #     if self._debug:
+    #         print('train step finished')
+    #     if attn:
+    #         return predictions, w
+    #     else:
+    #         return predictions
