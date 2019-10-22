@@ -35,6 +35,17 @@
 
 
 
+## Simple Start ( Repository Setting )
+
+```bash
+$ git clone https://github.com/jason9693/MusicTransformer-pytorch.git
+$ cd MusicTransformer-pytorch
+$ git clone https://github.com/jason9693/midi-neural-processor.git
+$ mv midi-neural-processor midi_processor
+```
+
+
+
 ## Midi Download	
 
 ```bash
@@ -64,7 +75,7 @@ $ python preprocess.py {midi_load_dir} {dataset_save_dir}
 * Train with only Decoder wise ( only self-attention AR. )
 
   ```bash
-  $ python train.py --epochs={NUM_EPOCHS} --load_path={NONE_OR_LOADING_DIR} --save_path={SAVING_DIR} --max_seq={SEQ_LENGTH} --pickle_dir={DATA_PATH} --batch_size={BATCH_SIZE} --l_r={LEARNING_RATE}
+  $ python train.py -c {config yml file 1} {config yml file 2} ... -m {model_dir}
   ```
 
   
@@ -96,25 +107,9 @@ $ python preprocess.py {midi_load_dir} {dataset_save_dir}
 
 ## Generate Music
 
-* mt.generate() can generate music automatically.
-
-  ```python
-  from model import MusicTransformerDecoder
-  mt = MusicTransformerDecoder(
-    	embedding_dim=256, vocab_size=par.vocab_size, 
-    	num_layer=6, 
-    	max_seq=max_seq,
-    	dropout=0.1,
-    	debug=False
-  )
-  mt.generate(prior=[64], length=2048)
-  ```
-
-* If you want to generate with shell wise, see this.
-
-  ```bash
-  $ python generate.py --load_path={CKPT_CONFIG_PATH} --length={GENERATE_SEQ_LENGTH} --beam={NONE_OR_BEAM_SIZE}
-  ```
+```bash
+$ python generate.py -c {config yml file 1} {config yml file 2} -m {model_dir}
+```
 
 
 
