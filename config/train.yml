@@ -1,0 +1,8 @@
+pickle_dir: '/data/private/MusicTransformer/dataset/processed'
+epochs: 100
+batch_size: 3
+load_path:
+dropout: 0.1
+debug: 'true'
+l_r: 0.001
+label_smooth: 0.1

@@ -7,13 +7,13 @@ from torch.nn.modules.loss import CrossEntropyLoss, _Loss
 
 
 class TransformerLoss(CrossEntropyLoss):
-    def __init__(self, weight: Optional[Any] = ..., ignore_index: int = ..., reduction: str = ...) -> None:
+    def __init__(self, ignore_index=-100, reduction='mean') -> None:
         self.reduction = reduction
         self.ignore_index = ignore_index
-        super().__init__(weight, ignore_index, 'none')
+        super().__init__(reduction='none')
 
     def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        mask = target != self.ignore_index
+        mask = (target != self.ignore_index).to(input.device, dtype=torch.float32)
         not_masked_length = mask.to(torch.int).sum()
         input = input.permute(0, -1, -2)
         _loss = super().forward(input, target)
@@ -48,8 +48,7 @@ class SmoothCrossEntropyLoss(_Loss):
             cross entropy: [1]
         """
         mask = (target == self.ignore_index).unsqueeze(-1)
-
-        q = F.one_hot(target, self.vocab_size).type(torch.float32)
+        q = F.one_hot(target.long(), self.vocab_size).type(torch.float32)
         u = 1.0 / self.vocab_size
         q_prime = (1.0 - self.label_smoothing) * q + self.label_smoothing * u
         q_prime = q_prime.masked_fill(mask, 0)

@@ -40,7 +40,6 @@ class MusicTransformer(torch.nn.Module):
             _, _, look_ahead_mask = utils.get_masked_with_pad_tensor(self.max_seq, x, x, config.pad_token)
             decoder, w = self.Decoder(x, look_ahead_mask)
             fc = self.fc(decoder)
-            fc = fc.softmax(-1)
             return fc.contiguous(), [weight.contiguous() for weight in w]
         else:
             return self.generate(self.Decoder, x, length, writer).contiguous()

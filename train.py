@@ -2,7 +2,7 @@ from model import MusicTransformer
 import custom
 from custom.metrics import *
 from custom.layers import *
-from custom.criterion import SmoothCrossEntropyLoss
+from custom.criterion import SmoothCrossEntropyLoss, TransformerLoss
 from custom.config import config
 from data import Data
 
@@ -62,8 +62,8 @@ print(mt)
 
 # define tensorboard writer
 current_time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
-train_log_dir = 'logs/mt_decoder/'+current_time+'/train'
-eval_log_dir = 'logs/mt_decoder/'+current_time+'/eval'
+train_log_dir = 'logs/mt/'+config.experiment+'/train'
+eval_log_dir = 'logs/mt/'+config.experiment+'/eval'
 
 train_summary_writer = SummaryWriter(train_log_dir)
 eval_summary_writer = SummaryWriter(eval_log_dir)
@@ -77,8 +77,8 @@ for e in range(config.epochs):
         opt.zero_grad()
         try:
             batch_x, batch_y = dataset.slide_seq2seq_batch(config.batch_size, config.max_seq)
-            batch_x = torch.from_numpy(batch_x).contiguous().to(config.device, non_blocking=True)
-            batch_y = torch.from_numpy(batch_y).contiguous().to(config.device, non_blocking=True)
+            batch_x = torch.from_numpy(batch_x).contiguous().to(config.device, non_blocking=True, dtype=torch.int)
+            batch_y = torch.from_numpy(batch_y).contiguous().to(config.device, non_blocking=True, dtype=torch.int)
         except IndexError:
             continue
 
@@ -91,11 +91,14 @@ for e in range(config.epochs):
         if config.debug:
             print("[Loss]: {}".format(loss))
 
+        train_summary_writer.add_scalar('loss', metrics['loss'], global_step=idx)
+        train_summary_writer.add_scalar('accuracy', metrics['accuracy'], global_step=idx)
+
         # result_metrics = metric_set(sample, batch_y)
         if b % 100 == 0:
             eval_x, eval_y = dataset.slide_seq2seq_batch(config.batch_size, config.max_seq, 'eval')
-            eval_x = torch.from_numpy(eval_x).contiguous().to(config.device, non_blocking=True)
-            eval_y = torch.from_numpy(eval_y).contiguous().to(config.device, non_blocking=True)
+            eval_x = torch.from_numpy(eval_x).contiguous().to(config.device, non_blocking=True, dtype=torch.int)
+            eval_y = torch.from_numpy(eval_y).contiguous().to(config.device, non_blocking=True, dtype=torch.int)
 
             eval_preiction, weights = mt.forward(eval_x)
             eval_metrics = metric_set(eval_preiction, eval_y)
@@ -103,19 +106,19 @@ for e in range(config.epochs):
             if b == 0:
                 train_summary_writer.add_histogram("target_analysis", batch_y, global_step=e)
                 train_summary_writer.add_histogram("source_analysis", batch_x, global_step=e)
-            train_summary_writer.add_scalar('loss', metrics['loss'], global_step=idx)
-            train_summary_writer.add_scalar('accuracy', metrics['accuracy'], global_step=idx)
+
 
             eval_summary_writer.add_scalar('loss', eval_metrics['loss'], global_step=idx)
             eval_summary_writer.add_scalar('accuracy', eval_metrics['accuracy'], global_step=idx)
             for i, weight in enumerate(weights):
                     attn_log_name = "attn/layer-{}".format(i)
-                    utils.attention_image_summary(attn_log_name, weights, step=idx, writer=eval_summary_writer)
-            idx += 1
+                    utils.attention_image_summary(attn_log_name, weight, step=idx, writer=eval_summary_writer)
+
             print('\n====================================================')
             print('Epoch/Batch: {}/{}'.format(e, b))
             print('Train >>>> Loss: {:6.6}, Accuracy: {}'.format(metrics['loss'], metrics['accuracy']))
-            print('Eval >>>> Loss: {:6.6}, Accuracy: {}'.format(eval_metrics['loss'], eval_metrics['acccuracy']))
+            print('Eval >>>> Loss: {:6.6}, Accuracy: {}'.format(eval_metrics['loss'], eval_metrics['accuracy']))
+        idx += 1
 
 torch.save(single_mt.state_dict(), args.model_dir+'/final.pth'.format(idx))
 eval_summary_writer.close()

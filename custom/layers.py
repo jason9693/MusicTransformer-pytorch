@@ -58,7 +58,7 @@ class RelativeGlobalAttention(torch.nn.Module):
         self.Wv = torch.nn.Linear(self.d, self.d)
         self.fc = torch.nn.Linear(d, d)
         self.additional = add_emb
-        self.E = torch.randn([self.max_seq, int(self.dh)], requires_grad=True)
+        self.E = torch.randn([self.max_seq, int(self.dh)], requires_grad=False)
         if self.additional:
             self.Radd = None
 
@@ -224,7 +224,7 @@ class Encoder(torch.nn.Module):
     def forward(self, x, mask=None):
         weights = []
         # adding embedding and position encoding.
-        x = self.embedding(x)  # (batch_size, input_seq_len, d_model)
+        x = self.embedding(x.to(torch.long))  # (batch_size, input_seq_len, d_model)
         x *= math.sqrt(self.d_model)
         x = self.pos_encoding(x)
         x = self.dropout(x)

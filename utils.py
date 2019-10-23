@@ -3,6 +3,7 @@ import numpy as np
 from deprecated.sequence import EventSeq, ControlSeq
 import torch
 import torch.nn.functional as F
+import torchvision
 # from custom.config import config
 
 
@@ -143,16 +144,17 @@ def attention_image_summary(name, attn, step=0, writer=None):
         (query_rows, query_cols, query_channels,
          memory_rows, memory_cols, memory_channels).
     """
-    num_heads = shape_list(attn)[1]
+    num_heads = attn.size(1)
     # [batch, query_length, memory_length, num_heads]
     image = attn.permute(0, 2, 3, 1)
     image = torch.pow(image, 0.2)  # for high-dynamic-range
     # Each head will correspond to one of RGB.
     # pad the heads to be a multiple of 3
-    image = F.pad(image, [0, 0, 0, 0, 0, 0, 0, torch.fmod(-num_heads, 3)])
+    image = F.pad(image, [0,  -num_heads % 3, 0, 0, 0, 0, 0, 0,])
     image = split_last_dimension(image, 3)
-    image = torch.max(image, dim=4)
-    writer.add_image(name, image, global_step=step, deformats='HWC')
+    image = image.max(dim=4).values
+    grid_image = torchvision.utils.make_grid(image.permute(0, 3, 1, 2))
+    writer.add_image(name, grid_image, global_step=step, dataformats='CHW')
 
 
 def split_last_dimension(x, n):
@@ -164,11 +166,11 @@ def split_last_dimension(x, n):
     Returns:
     a Tensor with shape [..., n, m/n]
     """
-    x_shape = shape_list(x)
+    x_shape = x.size()
     m = x_shape[-1]
     if isinstance(m, int) and isinstance(n, int):
         assert m % n == 0
-    return torch.reshape(x, x_shape[:-1] + [n, m // n])
+    return torch.reshape(x, x_shape[:-1] + (n, m // n))
 
 
 def subsequent_mask(size):

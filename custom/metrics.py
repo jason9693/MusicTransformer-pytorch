@@ -17,7 +17,7 @@ class Accuracy(_Metric):
         super().__init__()
 
     def forward(self, input: torch.Tensor, target: torch.Tensor):
-        bool_acc = input == target
+        bool_acc = input.long() == target.long()
         return bool_acc.sum() / bool_acc.numel()
 
 
