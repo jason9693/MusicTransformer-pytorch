@@ -66,26 +66,31 @@ class SmoothCrossEntropyLoss(_Loss):
         return -torch.sum(p * (q - q.logsumexp(dim=-1, keepdim=True)), dim=-1)
 
 
-# class CustomSchedule(LearningRateSchedule):
-#     def __init__(self, d_model, warmup_steps=4000):
-#         super(CustomSchedule, self).__init__()
-#
-#         self.d_model = d_model
-#         self.d_model = tf.cast(self.d_model, tf.float32)
-#
-#         self.warmup_steps = warmup_steps
-#
-#     def get_config(self):
-#         super(CustomSchedule, self).get_config()
-#
-#     def __call__(self, step):
-#         arg1 = tf.math.rsqrt(step)
-#         arg2 = step * (self.warmup_steps ** -1.5)
-#
-#         return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
+class CustomSchedule:
+    def __init__(self, d_model, warmup_steps=4000, optimizer=None):
+        super(CustomSchedule, self).__init__()
 
+        self.d_model = d_model
+        self.optimizer = optimizer
+        self.warmup_steps = warmup_steps
 
-if __name__ == '__main__':
-    import numpy as np
-    loss = TransformerLoss()(np.array([[1],[0],[0]]), tf.constant([[0.5,0.5],[0.1,0.1],[0.1,0.1]]))
-    print(loss)
+        self._step = 0
+        self._rate = 0
+
+    def step(self):
+        "Update parameters and rate"
+        self._step += 1
+        rate = self.rate()
+        for p in self.optimizer.param_groups:
+            p['lr'] = rate
+        self._rate = rate
+        self.optimizer.step()
+
+    def rate(self, step=None):
+        if step is None:
+            step = self._step
+        arg1 = step ** (-0.5)
+        arg2 = step * (self.warmup_steps ** -1.5)
+
+        return self.d_model ** (-0.5) * min(arg1, arg2)
+

@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import torch.nn.functional as F
 
 from typing import Dict
@@ -17,6 +18,11 @@ class Accuracy(_Metric):
         super().__init__()
 
     def forward(self, input: torch.Tensor, target: torch.Tensor):
+        """
+        :param input: [B, L]
+        :param target: [B, L]
+        :return:
+        """
         bool_acc = input.long() == target.long()
         return bool_acc.sum() / bool_acc.numel()
 
@@ -26,8 +32,26 @@ class CategoricalAccuracy(Accuracy):
         super().__init__()
 
     def forward(self, input: torch.Tensor, target: torch.Tensor):
+        """
+        :param input: [B, T, V]
+        :param target: [B, T]
+        :return:
+        """
+        input = input.softmax(-1)
         categorical_input = input.argmax(-1)
         return super().forward(categorical_input, target)
+
+
+class LogitsBucketting(_Metric):
+    def __init__(self, vocab_size):
+        super().__init__()
+        self.bucket = np.array([0] * vocab_size)
+
+    def forward(self, input: torch.Tensor, target: torch.Tensor):
+        self.bucket[input.flatten().to(torch.int32)] += 1
+
+    def get_bucket(self):
+        return self.bucket
 
 
 class MetricsSet(object):

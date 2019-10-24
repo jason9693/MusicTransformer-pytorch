@@ -1,14 +1,14 @@
 from model import MusicTransformer
 import custom
 from custom.metrics import *
-from custom.layers import *
-from custom.criterion import SmoothCrossEntropyLoss, TransformerLoss
+from custom.criterion import SmoothCrossEntropyLoss, CustomSchedule
 from custom.config import config
 from data import Data
 
 import utils
 import argparse
 import datetime
+import time
 
 import torch
 import torch.optim as optim
@@ -45,10 +45,13 @@ mt = MusicTransformer(
             debug=config.debug, loader_path=config.load_path
 )
 mt.to(config.device)
-opt = optim.Adam(mt.parameters(), lr=config.l_r)
+opt = optim.Adam(mt.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9)
+scheduler = CustomSchedule(config.embedding_dim, optimizer=opt)
+
 metric_set = MetricsSet({
     'accuracy': CategoricalAccuracy(),
-    'loss': SmoothCrossEntropyLoss(config.label_smooth, config.vocab_size, config.pad_token)
+    'loss': SmoothCrossEntropyLoss(config.label_smooth, config.vocab_size, config.pad_token),
+    'bucket':  LogitsBucketting(config.vocab_size)
 })
 
 # multi-GPU set
@@ -74,7 +77,7 @@ idx = 0
 for e in range(config.epochs):
     print(">>> [Epoch was updated]")
     for b in range(len(dataset.files) // config.batch_size):
-        opt.zero_grad()
+        scheduler.optimizer.zero_grad()
         try:
             batch_x, batch_y = dataset.slide_seq2seq_batch(config.batch_size, config.max_seq)
             batch_x = torch.from_numpy(batch_x).contiguous().to(config.device, non_blocking=True, dtype=torch.int)
@@ -82,17 +85,21 @@ for e in range(config.epochs):
         except IndexError:
             continue
 
+        start_time = time.time()
         mt.train()
         sample, _ = mt.forward(batch_x)
         metrics = metric_set(sample, batch_y)
         loss = metrics['loss']
         loss.backward()
-        opt.step()
+        scheduler.step()
+        end_time = time.time()
         if config.debug:
             print("[Loss]: {}".format(loss))
 
         train_summary_writer.add_scalar('loss', metrics['loss'], global_step=idx)
         train_summary_writer.add_scalar('accuracy', metrics['accuracy'], global_step=idx)
+        train_summary_writer.add_scalar('learning_rate', scheduler.rate(), global_step=idx)
+        train_summary_writer.add_scalar('iter_p_sec', end_time-start_time, global_step=idx)
 
         # result_metrics = metric_set(sample, batch_y)
         if b % 100 == 0:
@@ -107,9 +114,9 @@ for e in range(config.epochs):
                 train_summary_writer.add_histogram("target_analysis", batch_y, global_step=e)
                 train_summary_writer.add_histogram("source_analysis", batch_x, global_step=e)
 
-
             eval_summary_writer.add_scalar('loss', eval_metrics['loss'], global_step=idx)
             eval_summary_writer.add_scalar('accuracy', eval_metrics['accuracy'], global_step=idx)
+            eval_summary_writer.add_histogram("logits_bucket", metrics["bucket"].get_bucket(), global_step=idx)
             for i, weight in enumerate(weights):
                     attn_log_name = "attn/layer-{}".format(i)
                     utils.attention_image_summary(attn_log_name, weight, step=idx, writer=eval_summary_writer)
