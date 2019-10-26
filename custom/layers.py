@@ -98,7 +98,7 @@ class RelativeGlobalAttention(torch.nn.Module):
         logits = logits / math.sqrt(self.dh)
 
         if mask is not None:
-            logits += (mask * -1e9).to(logits.dtype)
+            logits += (mask.to(torch.int64) * -1e9).to(logits.dtype)
 
         attention_weights = F.softmax(logits, -1)
         attention = torch.matmul(attention_weights, v)

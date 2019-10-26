@@ -24,7 +24,15 @@ class Accuracy(_Metric):
         :return:
         """
         bool_acc = input.long() == target.long()
-        return bool_acc.sum() / bool_acc.numel()
+        return bool_acc.sum().to(torch.float) / bool_acc.numel()
+
+
+class MockAccuracy(Accuracy):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input: torch.Tensor, target: torch.Tensor):
+        return super().forward(input, target)
 
 
 class CategoricalAccuracy(Accuracy):
@@ -45,13 +53,9 @@ class CategoricalAccuracy(Accuracy):
 class LogitsBucketting(_Metric):
     def __init__(self, vocab_size):
         super().__init__()
-        self.bucket = np.array([0] * vocab_size)
 
     def forward(self, input: torch.Tensor, target: torch.Tensor):
-        self.bucket[input.flatten().to(torch.int32)] += 1
-
-    def get_bucket(self):
-        return self.bucket
+        return input.argmax(-1).flatten().to(torch.int32).cpu()
 
 
 class MetricsSet(object):
@@ -64,4 +68,14 @@ class MetricsSet(object):
 
     def forward(self, input: torch.Tensor, target: torch.Tensor):
         # return [metric(input, target) for metric in self.metrics]
-        return {k: metric(input, target) for k, metric in self.metrics.items()}
+        return {
+            k: metric(input.to(target.device), target)
+            for k, metric in self.metrics.items()}
+
+
+if __name__ == '__main__':
+    met = MockAccuracy()
+    test_tensor1 = torch.ones((3,2)).contiguous().cuda().to(non_blocking=True, dtype=torch.int)
+    test_tensor2 = torch.ones((3,2)).contiguous().cuda().to(non_blocking=True, dtype=torch.int)
+    test_tensor3 = torch.zeros((3,2))
+    print(met(test_tensor1, test_tensor2))

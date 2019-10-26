@@ -72,7 +72,7 @@ def get_masked_with_pad_tensor(size, src, trg, pad_token):
         trg_pad_tensor = torch.ones_like(trg).to(trg.device.type) * pad_token
         dec_trg_mask = trg == trg_pad_tensor
         # boolean reversing i.e) True * -1 + 1 = False
-        seq_mask = sequence_mask(torch.arange(1, size+1).to(trg.device), size) * -1 + 1
+        seq_mask = ~sequence_mask(torch.arange(1, size+1).to(trg.device), size)
         # look_ahead_mask = torch.max(dec_trg_mask, seq_mask)
         look_ahead_mask = dec_trg_mask | seq_mask
 
@@ -89,7 +89,7 @@ def get_mask_tensor(size):
     :return:
     """
     # boolean reversing i.e) True * -1 + 1 = False
-    seq_mask = sequence_mask(torch.arange(1, size + 1), size) * -1 + 1
+    seq_mask = ~sequence_mask(torch.arange(1, size + 1), size)
     return seq_mask
 
 

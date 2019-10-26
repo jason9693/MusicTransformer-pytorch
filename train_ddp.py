@@ -6,9 +6,13 @@ from custom.config import config
 from data import Data
 
 import utils
+import argparse
 import datetime
 import time
+import os
 
+from apex import amp
+from apex.parallel import DistributedDataParallel
 import torch
 import torch.optim as optim
 from tensorboardX import SummaryWriter
@@ -16,14 +20,29 @@ from tensorboardX import SummaryWriter
 
 # set config
 parser = custom.get_argument_parser()
+# set local rank for torch.distribute
+parser.add_argument('--local_rank', type=int)
 args = parser.parse_args()
 config.load(args.model_dir, args.configs, initialize=True)
 
-# check cuda
-if torch.cuda.is_available():
-    config.device = torch.device('cuda')
-else:
-    config.device = torch.device('cpu')
+
+config.device = torch.device('cuda')
+
+# FOR DISTRIBUTED:  If we are running under torch.distributed.launch,
+# the 'WORLD_SIZE' environment variable will also be set automatically.
+config.distributed = False
+if 'WORLD_SIZE' in os.environ:
+    config.distributed = int(os.environ['WORLD_SIZE']) > 1
+
+# FOR DISTRIBUTED:  Set the device according to local_rank.
+torch.cuda.set_device(args.local_rank)
+
+# FOR DISTRIBUTED:  Initialize the backend.  torch.distributed.launch will provide
+# environment variables, and requires that you use init_method=`env://`.
+torch.distributed.init_process_group(backend='nccl',
+                                     init_method='env://',
+                                     rank=args.local_rank,
+                                     world_size=4 * torch.cuda.device_count())
 
 
 # load data
@@ -33,6 +52,7 @@ print(dataset)
 
 # load model
 learning_rate = config.l_r
+
 
 # define model
 mt = MusicTransformer(
@@ -47,18 +67,16 @@ mt.to(config.device)
 opt = optim.Adam(mt.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9)
 scheduler = CustomSchedule(config.embedding_dim, optimizer=opt)
 
-# multi-GPU set
-if torch.cuda.device_count() > 1:
-    single_mt = mt
-    mt = torch.nn.DataParallel(mt, output_device=torch.cuda.device_count()-1)
-else:
-    single_mt = mt
+# Set model -> DDP
+single_mt = mt
+model, opt = amp.initialize(mt, scheduler.optimizer, opt_level="O1")
+mt = DistributedDataParallel(model)
 
-# init metric set
+
 metric_set = MetricsSet({
-    'accuracy': CategoricalAccuracy(),
+    'accuracy': CategoricalAccuracy().cpu(),
     'loss': SmoothCrossEntropyLoss(config.label_smooth, config.vocab_size, config.pad_token),
-    'bucket':  LogitsBucketting(config.vocab_size)
+    'bucket':  LogitsBucketting(config.vocab_size).cpu()
 })
 
 print(mt)
@@ -91,7 +109,8 @@ for e in range(config.epochs):
         sample, _ = mt.forward(batch_x)
         metrics = metric_set(sample, batch_y)
         loss = metrics['loss']
-        loss.backward()
+        with amp.scale_loss(loss, scheduler.optimizer) as scaled_loss:
+            scaled_loss.backward()
         scheduler.step()
         end_time = time.time()
 
@@ -106,21 +125,19 @@ for e in range(config.epochs):
         # result_metrics = metric_set(sample, batch_y)
         if b % 100 == 0:
             single_mt.eval()
-            eval_x, eval_y = dataset.slide_seq2seq_batch(2, config.max_seq, 'eval')
+            eval_x, eval_y = dataset.slide_seq2seq_batch(config.batch_size, config.max_seq, 'eval')
             eval_x = torch.from_numpy(eval_x).contiguous().to(config.device, dtype=torch.int)
-            eval_y = torch.from_numpy(eval_y).contiguous().to(config.device, dtype=torch.int)
+            eval_y = torch.from_numpy(eval_y).contiguous().cpu().to(config.device, dtype=torch.int)
 
             eval_preiction, weights = single_mt.forward(eval_x)
-
-            eval_metrics = metric_set(eval_preiction, eval_y)
+            eval_metrics = metric_set(eval_preiction.cpu(), eval_y.cpu())
             torch.save(single_mt.state_dict(), args.model_dir+'/train-{}.pth'.format(e))
             if b == 0:
                 train_summary_writer.add_histogram("target_analysis", batch_y, global_step=e)
                 train_summary_writer.add_histogram("source_analysis", batch_x, global_step=e)
                 for i, weight in enumerate(weights):
                     attn_log_name = "attn/layer-{}".format(i)
-                    utils.attention_image_summary(
-                        attn_log_name, weight, step=idx, writer=eval_summary_writer)
+                    utils.attention_image_summary(attn_log_name, weight, step=idx, writer=eval_summary_writer)
 
             eval_summary_writer.add_scalar('loss', eval_metrics['loss'], global_step=idx)
             eval_summary_writer.add_scalar('accuracy', eval_metrics['accuracy'], global_step=idx)
@@ -132,13 +149,6 @@ for e in range(config.epochs):
             print('Eval >>>> Loss: {:6.6}, Accuracy: {}'.format(eval_metrics['loss'], eval_metrics['accuracy']))
         torch.cuda.empty_cache()
         idx += 1
-
-        # switch output device to: gpu-1 ~ gpu-n
-        sw_start = time.time()
-        mt.output_device = idx % (torch.cuda.device_count() -1) + 1
-        sw_end = time.time()
-        if config.debug:
-            print('output switch time: {}'.format(sw_end - sw_start) )
 
 torch.save(single_mt.state_dict(), args.model_dir+'/final.pth'.format(idx))
 eval_summary_writer.close()

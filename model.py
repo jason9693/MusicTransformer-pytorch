@@ -36,9 +36,9 @@ class MusicTransformer(torch.nn.Module):
         self.fc = torch.nn.Linear(self.embedding_dim, self.vocab_size)
 
     def forward(self, x, length=None, writer=None):
-        if self.training:
+        if self.training or self.eval:
             _, _, look_ahead_mask = utils.get_masked_with_pad_tensor(self.max_seq, x, x, config.pad_token)
-            decoder, w = self.Decoder(x, look_ahead_mask)
+            decoder, w = self.Decoder(x, mask=look_ahead_mask)
             fc = self.fc(decoder)
             return fc.contiguous(), [weight.contiguous() for weight in w]
         else:
@@ -72,17 +72,3 @@ class MusicTransformer(torch.nn.Module):
             del look_ahead_mask
         decode_array = decode_array[0]
         return decode_array
-
-    # def teacher_forcing_forward(self, x, attn=False):
-    #     _, _, look_ahead_mask = utils.get_masked_with_pad_tensor(self.max_seq, x, x, config.pad_token)
-    #
-    #     predictions, w = self(
-    #         x, lookup_mask=look_ahead_mask,
-    #     )
-    #
-    #     if self._debug:
-    #         print('train step finished')
-    #     if attn:
-    #         return predictions, w
-    #     else:
-    #         return predictions
