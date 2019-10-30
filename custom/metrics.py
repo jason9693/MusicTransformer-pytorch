@@ -1,3 +1,5 @@
+from custom.parallel import DataParallelCriterion
+
 import torch
 import numpy as np
 import torch.nn.functional as F
@@ -55,7 +57,7 @@ class LogitsBucketting(_Metric):
         super().__init__()
 
     def forward(self, input: torch.Tensor, target: torch.Tensor):
-        return input.argmax(-1).flatten().to(torch.int32).cpu()
+        return input.argmax(-1).flatten().to(torch.int32)
 
 
 class MetricsSet(object):
@@ -70,6 +72,18 @@ class MetricsSet(object):
         # return [metric(input, target) for metric in self.metrics]
         return {
             k: metric(input.to(target.device), target)
+            for k, metric in self.metrics.items()}
+
+
+class ParallelMetricSet(MetricsSet):
+    def __init__(self, metric_dict: Dict):
+        super(ParallelMetricSet, self).__init__(metric_dict)
+        self.metrics = {k: DataParallelCriterion(v) for k, v in metric_dict.items()}
+
+    def forward(self, input, target):
+        # return [metric(input, target) for metric in self.metrics]
+        return {
+            k: metric(input, target)
             for k, metric in self.metrics.items()}
 
 

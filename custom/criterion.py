@@ -13,11 +13,12 @@ class TransformerLoss(CrossEntropyLoss):
         super().__init__(reduction='none')
 
     def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        mask = (target != self.ignore_index).to(input.device, dtype=torch.float32)
+        target = target.to(torch.long)
+        mask = (target != self.ignore_index).to(input.device, dtype=torch.long)
         not_masked_length = mask.to(torch.int).sum()
         input = input.permute(0, -1, -2)
         _loss = super().forward(input, target)
-        _loss *= mask
+        _loss *= mask.to(_loss.dtype)
         return _loss.sum() / not_masked_length
 
     def __call__(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:

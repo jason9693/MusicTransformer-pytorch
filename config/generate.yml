@@ -1,4 +1,3 @@
 save_path: 'bin/generated.mid'
-condition_file: 'dataset/midi/BENABD10.mid'
+condition_file:
 length: 2048
-load_path: None

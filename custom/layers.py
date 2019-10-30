@@ -218,7 +218,7 @@ class Encoder(torch.nn.Module):
 
         self.enc_layers = torch.nn.ModuleList(
             [EncoderLayer(d_model, rate, h=self.d_model // 64, additional=False, max_seq=max_len)
-                           for i in range(num_layers)])
+             for _ in range(num_layers)])
         self.dropout = torch.nn.Dropout(rate)
 
     def forward(self, x, mask=None):
@@ -234,15 +234,10 @@ class Encoder(torch.nn.Module):
         return x, weights # (batch_size, input_seq_len, d_model)
 
 
-class MusicTransformerDataParallel(torch.nn.DataParallel):
-    def __getattr__(self, name):
-        try:
-            return super().__getattr__(name)
-        except AttributeError:
-            return getattr(self.module, name)
-
-    def forward(self, *inputs, **kwargs):
-        try:
-            return super().forward(*inputs)
-        except NotImplementedError:
-            return self.module(*inputs)
+# class MusicTransformerDataParallelCriterion(torch.nn.DataParallel):
+#     def forward(self, inputs, *targets, **kwargs):
+#         targets, kwargs = self.scatter(targets, kwargs, self.device_ids)
+#         replicas = self.replicate(self.module, self.device_ids[:len(inputs)])
+#         targets = tuple(targets_per_gpu[0] for targets_per_gpu in targets)
+#         outputs = _criterion_parallel_apply(replicas, inputs, targets, kwargs)
+#         return Reduce.apply(*outputs) / len(outputs), targets

@@ -1,5 +1,5 @@
-pickle_dir: 'MusicTransformer/dataset/processed'
-epochs: 100
+pickle_dir: '../MusicTransformer/dataset/processed'
+epochs: 1000
 batch_size: 8
 load_path:
 dropout: 0.1

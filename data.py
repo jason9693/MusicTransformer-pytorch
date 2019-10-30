@@ -84,9 +84,10 @@ class Data:
                 start = random.randrange(0,len(data) - max_length)
                 data = data[start:start + max_length]
             else:
-                data = np.append(data, config.token_eos)
-                while len(data) < max_length:
-                    data = np.append(data, config.pad_token)
+                raise IndexError
+                # data = np.append(data, config.token_eos)
+                # while len(data) < max_length:
+                #     data = np.append(data, config.pad_token)
         return data
 
 
@@ -134,37 +135,3 @@ if __name__ == '__main__':
                 except KeyError:
                     cnt_dict['index-'+str(index)] = 1
         return cnt_arr
-
-    # print(add_noise(np.array([[1,2,3,3,4,5,6]]), rate=0.2))
-
-
-    # print(par.vocab_size)
-    # data = Data('dataset/processed')
-    # # ds = DataSequence('dataset/processed', 10, 2048)
-    # sample = data.seq2seq_batch(1000, 100)[0]
-    # pprint.pprint(list(sample))
-    # arr = count_dict(par.vocab_size+3,sample)
-    # pprint.pprint(
-    #     arr)
-    #
-    # from sequence import EventSeq, Event
-    #
-    # event_cnt = {
-    #     'note_on': 0,
-    #     'note_off': 0,
-    #     'velocity': 0,
-    #     'time_shift': 0
-    # }
-    # for event_index in range(len(arr)):
-    #     for event_type, feat_range in EventSeq.feat_ranges().items():
-    #
-    #         if feat_range.start <= event_index < feat_range.stop:
-    #             print(event_type+':'+str(arr[event_index])+' event cnt: '+str(event_cnt))
-    #             event_cnt[event_type] += arr[event_index]
-    #
-    # print(event_cnt)
-
-    # print(np.max(sample), np.min(sample))
-    # print([data._get_seq(file).shape for file in data.files])
-    #while True:
-    # print(ds.__getitem__(10)[1].argmax(-1))
