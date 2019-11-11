@@ -21,7 +21,7 @@ pyfiglet==0.8.post1
 pygobject==3.26.1
 python-apt==1.6.4
 pytz==2019.1
-pyxdg==0.25
+pyxdg==0.26
 PyYAML==5.1.1
 querystring-parser==1.2.3
 schema==0.7.0
