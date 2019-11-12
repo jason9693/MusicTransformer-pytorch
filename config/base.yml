@@ -1,4 +1,4 @@
-experiment: 'debug'
+experiment: 'embedding256-layer6'
 max_seq: 2048
 embedding_dim: 256
 num_layers: 6

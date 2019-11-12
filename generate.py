@@ -42,7 +42,7 @@ print(config.condition_file)
 if config.condition_file is not None:
     inputs = np.array([encode_midi('dataset/midi/BENABD10.mid')[:500]])
 else:
-    inputs = np.array([[28]])
+    inputs = np.array([[24, 28, 31]])
 inputs = torch.from_numpy(inputs)
 result = mt(inputs, config.length, gen_summary_writer)
 

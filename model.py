@@ -42,36 +42,44 @@ class MusicTransformer(torch.nn.Module):
             fc = self.fc(decoder)
             return fc.contiguous() if self.training else fc.contiguous(), [weight.contiguous() for weight in w]
         else:
-            return self.generate(self.Decoder, x, length, writer).contiguous().tolist()
+            return self.generate(x, length, None).contiguous().tolist()
 
-    def generate(self, decode_fn, prior: torch.Tensor, length=2048, tf_board_writer: SummaryWriter = None):
+    def generate(self,
+                 prior: torch.Tensor,
+                 length=2048,
+                 tf_board_writer: SummaryWriter = None):
         decode_array = prior
-        for i in Bar('generating').iter(range(min(self.max_seq, length))):
-            if decode_array.size(1) >= self.max_seq:
-                break
+        result_array = prior
+        print(config)
+        print(length)
+        for i in Bar('generating').iter(range(length)):
+            if decode_array.size(1) >= config.threshold_len:
+                decode_array = decode_array[:, 1:]
             _, _, look_ahead_mask = \
                 utils.get_masked_with_pad_tensor(decode_array.size(1), decode_array, decode_array, pad_token=config.pad_token)
 
             # result, _ = self.forward(decode_array, lookup_mask=look_ahead_mask)
-            result, _ = decode_fn(decode_array, look_ahead_mask)
+            # result, _ = decode_fn(decode_array, look_ahead_mask)
+            result, _ = self.Decoder(decode_array, None)
             result = self.fc(result)
             result = result.softmax(-1)
 
             if tf_board_writer:
                 tf_board_writer.add_image("logits", result, global_step=i)
 
-            u = random.uniform(0, 1)
+            u = 0
             if u > 1:
-                result = result[:, -1].argmax(-1).to(torch.int32)
-                decode_array = torch.cat([decode_array, result.unsqueeze(-1)], -1)
+                result = result[:, -1].argmax(-1).to(decode_array.dtype)
+                decode_array = torch.cat((decode_array, result.unsqueeze(-1)), -1)
             else:
                 pdf = dist.OneHotCategorical(probs=result[:, -1])
-                result = pdf.sample().argmax(-1).unsqueeze(0)
+                result = pdf.sample().argmax(-1).unsqueeze(-1)
                 # result = torch.transpose(result, 1, 0).to(torch.int32)
                 decode_array = torch.cat((decode_array, result), dim=-1)
+                result_array = torch.cat((result_array, result), dim=-1)
             del look_ahead_mask
-        decode_array = decode_array[0]
-        return decode_array
+        result_array = result_array[0]
+        return result_array
 
     def test(self):
         self.eval()
