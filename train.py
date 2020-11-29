@@ -135,7 +135,8 @@ for e in range(config.epochs):
 
         # switch output device to: gpu-1 ~ gpu-n
         sw_start = time.time()
-        mt.output_device = idx % (torch.cuda.device_count() -1) + 1
+        if torch.cuda.device_count() > 1:
+            mt.output_device = idx % (torch.cuda.device_count() -1) + 1
         sw_end = time.time()
         if config.debug:
             print('output switch time: {}'.format(sw_end - sw_start) )
